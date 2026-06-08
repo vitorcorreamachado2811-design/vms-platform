@@ -3,7 +3,7 @@
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libglib2.0-0 \
-    libgl1-mesa-glx \
+    libgl1 \
     libxcb1 \
     libx11-6 \
     && rm -rf /var/lib/apt/lists/*
