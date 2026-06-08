@@ -1,59 +1,68 @@
-﻿import cv2
+﻿$code = @'
 import requests
 import threading
 import time
+import numpy as np
 from ultralytics import YOLO
+from urllib.request import urlopen
 
 API_BASE = "https://vms-platform-production.up.railway.app"
 model = YOLO("yolov8n.pt")
+
+def capturar_frame_rtsp(rtsp_url):
+    import subprocess
+    cmd = [
+        "ffmpeg", "-rtsp_transport", "tcp",
+        "-i", rtsp_url,
+        "-frames:v", "1",
+        "-f", "image2pipe",
+        "-vcodec", "rawvideo",
+        "-pix_fmt", "rgb24",
+        "pipe:1"
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        if result.returncode == 0 and len(result.stdout) > 0:
+            return result.stdout
+    except Exception as e:
+        print(f"Erro ffmpeg: {e}")
+    return None
 
 def processar_camera(camera):
     camera_id = camera["id"]
     nome = camera["nome"]
     rtsp_url = camera["rtsp_url"]
 
-    print(f"[{nome}] Conectando ao stream RTSP...")
+    print(f"[{nome}] Iniciando processamento...")
 
     while True:
         try:
-            cap = cv2.VideoCapture(rtsp_url)
-            if not cap.isOpened():
-                print(f"[{nome}] Erro ao conectar. Tentando novamente em 10s...")
+            frame_data = capturar_frame_rtsp(rtsp_url)
+            if frame_data is None:
+                print(f"[{nome}] Sem frame. Tentando em 10s...")
                 time.sleep(10)
                 continue
 
-            print(f"[{nome}] Conectado!")
-            frame_count = 0
+            results = model(np.frombuffer(frame_data, dtype=np.uint8).reshape(-1, 1, 3), verbose=False)
+            detections = results[0].boxes
 
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    print(f"[{nome}] Stream perdido. Reconectando...")
-                    break
+            pessoas = 0
+            for box in detections:
+                class_id = int(box.cls[0])
+                confianca = float(box.conf[0])
+                if class_id == 0:
+                    pessoas += 1
+                    try:
+                        requests.post(f"{API_BASE}/eventos/", json={
+                            "camera_id": camera_id,
+                            "tipo": "person",
+                            "confianca": round(confianca, 2)
+                        }, timeout=3)
+                        print(f"[{nome}] Pessoa detectada ({confianca:.0%})")
+                    except Exception as e:
+                        print(f"[{nome}] Erro ao salvar: {e}")
 
-                frame_count += 1
-                if frame_count % 15 != 0:
-                    continue
-
-                results = model(frame, verbose=False)
-                detections = results[0].boxes
-
-                for box in detections:
-                    class_id = int(box.cls[0])
-                    confianca = float(box.conf[0])
-
-                    if class_id == 0:
-                        try:
-                            requests.post(f"{API_BASE}/eventos/", json={
-                                "camera_id": camera_id,
-                                "tipo": "person",
-                                "confianca": round(confianca, 2)
-                            }, timeout=3)
-                            print(f"[{nome}] Pessoa detectada ({confianca:.0%}) — salvo!")
-                        except Exception as e:
-                            print(f"[{nome}] Erro ao salvar: {e}")
-
-            cap.release()
+            time.sleep(2)
 
         except Exception as e:
             print(f"[{nome}] Erro: {e}. Reiniciando em 10s...")
@@ -61,7 +70,6 @@ def processar_camera(camera):
 
 def main():
     print("VMS Worker iniciando...")
-    print(f"Conectando ao backend: {API_BASE}")
 
     while True:
         try:
@@ -76,16 +84,12 @@ def main():
 
     threads = []
     for camera in cameras_ativas:
-        t = threading.Thread(
-            target=processar_camera,
-            args=(camera,),
-            daemon=True
-        )
+        t = threading.Thread(target=processar_camera, args=(camera,), daemon=True)
         t.start()
         threads.append(t)
-        print(f"Thread iniciada para: {camera['nome']}")
+        print(f"Thread iniciada: {camera['nome']}")
 
-    print("Todas as threads rodando. Pressione Ctrl+C para parar.")
+    print("Todas as threads rodando.")
     try:
         while True:
             time.sleep(60)
@@ -96,3 +100,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+'@
+Set-Content -Path "C:\Users\vitor\vms-platform\worker.py" -Value $code -Encoding UTF8
