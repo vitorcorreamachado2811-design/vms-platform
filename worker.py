@@ -1,27 +1,24 @@
-﻿$code = @'
-import requests
+﻿import requests
 import threading
 import time
 import numpy as np
 from ultralytics import YOLO
-from urllib.request import urlopen
 
 API_BASE = "https://vms-platform-production.up.railway.app"
 model = YOLO("yolov8n.pt")
 
-def capturar_frame_rtsp(rtsp_url):
+def capturar_frame(rtsp_url):
     import subprocess
     cmd = [
         "ffmpeg", "-rtsp_transport", "tcp",
         "-i", rtsp_url,
         "-frames:v", "1",
-        "-f", "image2pipe",
-        "-vcodec", "rawvideo",
+        "-f", "rawvideo",
         "-pix_fmt", "rgb24",
         "pipe:1"
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
         if result.returncode == 0 and len(result.stdout) > 0:
             return result.stdout
     except Exception as e:
@@ -32,26 +29,23 @@ def processar_camera(camera):
     camera_id = camera["id"]
     nome = camera["nome"]
     rtsp_url = camera["rtsp_url"]
-
-    print(f"[{nome}] Iniciando processamento...")
+    print(f"[{nome}] Iniciando...")
 
     while True:
         try:
-            frame_data = capturar_frame_rtsp(rtsp_url)
+            frame_data = capturar_frame(rtsp_url)
             if frame_data is None:
-                print(f"[{nome}] Sem frame. Tentando em 10s...")
+                print(f"[{nome}] Sem frame. Aguardando 10s...")
                 time.sleep(10)
                 continue
 
-            results = model(np.frombuffer(frame_data, dtype=np.uint8).reshape(-1, 1, 3), verbose=False)
-            detections = results[0].boxes
+            arr = np.frombuffer(frame_data, dtype=np.uint8)
+            results = model(arr.reshape(-1, 1, 3), verbose=False)
 
-            pessoas = 0
-            for box in detections:
+            for box in results[0].boxes:
                 class_id = int(box.cls[0])
                 confianca = float(box.conf[0])
                 if class_id == 0:
-                    pessoas += 1
                     try:
                         requests.post(f"{API_BASE}/eventos/", json={
                             "camera_id": camera_id,
@@ -70,26 +64,23 @@ def processar_camera(camera):
 
 def main():
     print("VMS Worker iniciando...")
-
     while True:
         try:
             resp = requests.get(f"{API_BASE}/cameras/", timeout=10)
-            cameras = resp.json()
-            cameras_ativas = [c for c in cameras if c.get("ativo")]
-            print(f"{len(cameras_ativas)} cameras ativas encontradas")
+            cameras = [c for c in resp.json() if c.get("ativo")]
+            print(f"{len(cameras)} cameras ativas")
             break
         except Exception as e:
-            print(f"Erro ao buscar cameras: {e}. Tentando em 5s...")
+            print(f"Erro: {e}. Tentando em 5s...")
             time.sleep(5)
 
     threads = []
-    for camera in cameras_ativas:
+    for camera in cameras:
         t = threading.Thread(target=processar_camera, args=(camera,), daemon=True)
         t.start()
         threads.append(t)
         print(f"Thread iniciada: {camera['nome']}")
 
-    print("Todas as threads rodando.")
     try:
         while True:
             time.sleep(60)
@@ -100,5 +91,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-'@
-Set-Content -Path "C:\Users\vitor\vms-platform\worker.py" -Value $code -Encoding UTF8
