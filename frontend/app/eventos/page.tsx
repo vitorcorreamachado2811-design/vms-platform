@@ -61,7 +61,6 @@ export default function EventosPage() {
     } catch {}
   }
 
-  // Tela de loading de autenticação
   if (authCarregando) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -79,13 +78,14 @@ export default function EventosPage() {
     return new Date(e.criado_em).toDateString() === hoje
   }).length
 
+  const totalQuedas = eventos.filter(e => e.tipo === 'queda').length
+
   function dadosGrafico() {
     const contagem: Record<string, number> = {}
     for (let h = 0; h < 24; h++) {
       contagem[String(h).padStart(2, '0') + 'h'] = 0
     }
     eventosFiltrados.forEach(e => {
-      // Ajusta UTC → BRT (-3h)
       const data = new Date(e.criado_em)
       const hora = new Date(data.getTime() - 3 * 60 * 60 * 1000).getHours()
       const chave = String(hora).padStart(2, '0') + 'h'
@@ -96,7 +96,6 @@ export default function EventosPage() {
 
   function formatarData(criado_em: string) {
     if (!criado_em) return '-'
-    // Ajusta UTC → BRT (-3h)
     const data = new Date(criado_em)
     const brt = new Date(data.getTime() - 3 * 60 * 60 * 1000)
     return brt.toLocaleString('pt-BR')
@@ -147,10 +146,23 @@ export default function EventosPage() {
           </div>
         </div>
 
+        {/* Alerta de queda */}
+        {totalQuedas > 0 && (
+          <div className="bg-red-900/40 border border-red-500 rounded-xl p-4 mb-6 flex items-center gap-4 animate-pulse">
+            <span className="text-3xl">🚨</span>
+            <div>
+              <p className="font-bold text-red-300 text-lg">
+                {totalQuedas} queda{totalQuedas > 1 ? 's' : ''} detectada{totalQuedas > 1 ? 's' : ''}!
+              </p>
+              <p className="text-red-400 text-sm">Verifique as câmeras imediatamente.</p>
+            </div>
+          </div>
+        )}
+
         {/* Cards resumo */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-5 gap-4 mb-8">
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Total de Eventos</p>
+            <p className="text-gray-400 text-sm">Total Eventos</p>
             <p className="text-3xl font-bold text-blue-400">{eventosFiltrados.length}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
@@ -160,6 +172,10 @@ export default function EventosPage() {
           <div className="bg-gray-800 rounded-xl p-4">
             <p className="text-gray-400 text-sm">Hora com mais movimento</p>
             <p className="text-3xl font-bold text-yellow-400">{horaComMaisDeteccoes.hora}</p>
+          </div>
+          <div className="bg-red-900/30 border border-red-500/30 rounded-xl p-4">
+            <p className="text-gray-400 text-sm">Quedas detectadas</p>
+            <p className="text-3xl font-bold text-red-400">{totalQuedas}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
             <p className="text-gray-400 text-sm">Auto-Refresh</p>
@@ -251,10 +267,21 @@ export default function EventosPage() {
                 </thead>
                 <tbody>
                   {eventosFiltrados.map(evento => (
-                    <tr key={evento.id} className="border-b border-gray-700 hover:bg-gray-700/50 transition">
+                    <tr
+                      key={evento.id}
+                      className={`border-b border-gray-700 transition ${
+                        evento.tipo === 'queda'
+                          ? 'bg-red-900/20 hover:bg-red-900/30'
+                          : 'hover:bg-gray-700/50'
+                      }`}
+                    >
                       <td className="py-3 pr-4">
-                        <span className="bg-blue-900 text-blue-300 px-2 py-1 rounded-full text-xs font-bold">
-                          {evento.tipo}
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          evento.tipo === 'queda'
+                            ? 'bg-red-900 text-red-300 animate-pulse'
+                            : 'bg-blue-900 text-blue-300'
+                        }`}>
+                          {evento.tipo === 'queda' ? '⚠️ QUEDA' : evento.tipo}
                         </span>
                       </td>
                       <td className={`py-3 pr-4 font-bold ${corConfianca(evento.confianca)}`}>
