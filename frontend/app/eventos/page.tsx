@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useAuth } from '../hooks/useAuth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+const API = 'https://vms-platform-production.up.railway.app'
 
 interface Evento {
   id: string
@@ -17,19 +20,17 @@ interface Camera {
   nome: string
 }
 
-interface DadoGrafico {
-  hora: string
-  deteccoes: number
-}
-
 export default function EventosPage() {
+  const { usuario, carregando: authCarregando, logout } = useAuth()
   const [eventos, setEventos] = useState<Evento[]>([])
   const [cameras, setCameras] = useState<Camera[]>([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [cameraSelecionada, setCameraSelecionada] = useState<string>('todas')
 
-  useEffect(() => { carregarDados() }, [])
+  useEffect(() => {
+    if (!authCarregando) carregarDados()
+  }, [authCarregando])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -38,18 +39,35 @@ export default function EventosPage() {
   }, [autoRefresh])
 
   async function carregarDados() {
-    const [e, c] = await Promise.all([
-      fetch('https://vms-platform-production.up.railway.app/eventos/').then(r => r.json()),
-      fetch('https://vms-platform-production.up.railway.app/cameras/').then(r => r.json()),
-    ])
-    setEventos(e)
-    setCameras(c)
-    setLoading(false)
+    try {
+      const [e, c] = await Promise.all([
+        fetch(`${API}/eventos/`).then(r => r.json()),
+        fetch(`${API}/cameras/`).then(r => r.json()),
+      ])
+      setEventos(Array.isArray(e) ? e : [])
+      setCameras(Array.isArray(c) ? c : [])
+    } catch {
+      setEventos([])
+      setCameras([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function carregarEventos() {
-    const data = await fetch('https://vms-platform-production.up.railway.app/eventos/').then(r => r.json())
-    setEventos(data)
+    try {
+      const data = await fetch(`${API}/eventos/`).then(r => r.json())
+      setEventos(Array.isArray(data) ? data : [])
+    } catch {}
+  }
+
+  // Tela de loading de autenticação
+  if (authCarregando) {
+    return (
+      <main className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </main>
+    )
   }
 
   const eventosFiltrados = cameraSelecionada === 'todas'
@@ -61,13 +79,15 @@ export default function EventosPage() {
     return new Date(e.criado_em).toDateString() === hoje
   }).length
 
-  function dadosGrafico(): DadoGrafico[] {
+  function dadosGrafico() {
     const contagem: Record<string, number> = {}
     for (let h = 0; h < 24; h++) {
       contagem[String(h).padStart(2, '0') + 'h'] = 0
     }
     eventosFiltrados.forEach(e => {
-      const hora = new Date(e.criado_em).getHours()
+      // Ajusta UTC → BRT (-3h)
+      const data = new Date(e.criado_em)
+      const hora = new Date(data.getTime() - 3 * 60 * 60 * 1000).getHours()
       const chave = String(hora).padStart(2, '0') + 'h'
       contagem[chave] = (contagem[chave] || 0) + 1
     })
@@ -76,7 +96,10 @@ export default function EventosPage() {
 
   function formatarData(criado_em: string) {
     if (!criado_em) return '-'
-    return new Date(criado_em).toLocaleString('pt-BR')
+    // Ajusta UTC → BRT (-3h)
+    const data = new Date(criado_em)
+    const brt = new Date(data.getTime() - 3 * 60 * 60 * 1000)
+    return brt.toLocaleString('pt-BR')
   }
 
   function corConfianca(confianca: number) {
@@ -90,22 +113,41 @@ export default function EventosPage() {
     return cam ? cam.nome : camera_id.slice(0, 8) + '...'
   }
 
-  const horaComMaisDeteccoes = dadosGrafico().reduce((max, item) =>
-    item.deteccoes > max.deteccoes ? item : max, { hora: '-', deteccoes: 0 })
+  const horaComMaisDeteccoes = dadosGrafico().reduce(
+    (max, item) => item.deteccoes > max.deteccoes ? item : max,
+    { hora: '-', deteccoes: 0 }
+  )
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-8">
       <div className="max-w-6xl mx-auto">
+
+        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-blue-400">VMS Platform</h1>
-            <p className="text-gray-400 mt-1">Eventos detectados pela IA</p>
+            <h1 className="text-3xl font-bold text-blue-400">Eventos</h1>
+            <p className="text-gray-400 mt-1">Detecções em tempo real pela IA</p>
           </div>
-          <Link href="/" className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg transition text-sm">
-            Voltar ao Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            {usuario && (
+              <span className="text-gray-400 text-sm hidden md:block">👤 {usuario.nome}</span>
+            )}
+            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
+              📷 Ao Vivo
+            </Link>
+            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">
+              ← Dashboard
+            </Link>
+            <button
+              onClick={logout}
+              className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300"
+            >
+              Sair
+            </button>
+          </div>
         </div>
 
+        {/* Cards resumo */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           <div className="bg-gray-800 rounded-xl p-4">
             <p className="text-gray-400 text-sm">Total de Eventos</p>
@@ -125,20 +167,21 @@ export default function EventosPage() {
               onClick={() => setAutoRefresh(v => !v)}
               className={`mt-1 text-sm px-3 py-1 rounded-full font-bold transition ${autoRefresh ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}
             >
-              {autoRefresh ? 'Ativo (3s)' : 'Pausado'}
+              {autoRefresh ? '● Ativo (3s)' : '○ Pausado'}
             </button>
           </div>
         </div>
 
+        {/* Gráfico */}
         <div className="bg-gray-800 rounded-xl p-6 mb-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">Deteccoes por hora do dia</h2>
+            <h2 className="text-xl font-bold">Detecções por hora do dia</h2>
             <select
               value={cameraSelecionada}
               onChange={e => setCameraSelecionada(e.target.value)}
               className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"
             >
-              <option value="todas">Todas as cameras</option>
+              <option value="todas">Todas as câmeras</option>
               {cameras.map(c => (
                 <option key={c.id} value={c.id}>{c.nome}</option>
               ))}
@@ -154,11 +197,12 @@ export default function EventosPage() {
                 labelStyle={{ color: '#F3F4F6' }}
                 itemStyle={{ color: '#60A5FA' }}
               />
-              <Bar dataKey="deteccoes" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Deteccoes" />
+              <Bar dataKey="deteccoes" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Detecções" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
+        {/* Tabela */}
         <div className="bg-gray-800 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">Lista de Eventos</h2>
@@ -168,7 +212,7 @@ export default function EventosPage() {
                 onChange={e => setCameraSelecionada(e.target.value)}
                 className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"
               >
-                <option value="todas">Todas as cameras ({eventos.length})</option>
+                <option value="todas">Todas ({eventos.length})</option>
                 {cameras.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.nome} ({eventos.filter(e => e.camera_id === c.id).length})
@@ -179,29 +223,35 @@ export default function EventosPage() {
                 onClick={carregarEventos}
                 className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-bold transition"
               >
-                Atualizar
+                🔄 Atualizar
               </button>
             </div>
           </div>
 
           {loading ? (
-            <p className="text-gray-400">Carregando eventos...</p>
+            <div className="flex items-center justify-center h-32">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : eventosFiltrados.length === 0 ? (
-            <p className="text-gray-400">Nenhum evento para esta camera ainda.</p>
+            <div className="text-center py-12 text-gray-500">
+              <div className="text-4xl mb-2">📭</div>
+              <p>Nenhum evento detectado ainda.</p>
+              <p className="text-xs mt-1">O worker YOLO detecta pessoas automaticamente 24/7.</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-gray-400 border-b border-gray-700 text-left">
                     <th className="pb-3 pr-4">Tipo</th>
-                    <th className="pb-3 pr-4">Confianca</th>
-                    <th className="pb-3 pr-4">Camera</th>
-                    <th className="pb-3">Data/Hora</th>
+                    <th className="pb-3 pr-4">Confiança</th>
+                    <th className="pb-3 pr-4">Câmera</th>
+                    <th className="pb-3">Data/Hora (BRT)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...eventosFiltrados].reverse().map(evento => (
-                    <tr key={evento.id} className="border-b border-gray-700 hover:bg-gray-700 transition">
+                  {eventosFiltrados.map(evento => (
+                    <tr key={evento.id} className="border-b border-gray-700 hover:bg-gray-700/50 transition">
                       <td className="py-3 pr-4">
                         <span className="bg-blue-900 text-blue-300 px-2 py-1 rounded-full text-xs font-bold">
                           {evento.tipo}
@@ -223,6 +273,7 @@ export default function EventosPage() {
             </div>
           )}
         </div>
+
       </div>
     </main>
   )
