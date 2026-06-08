@@ -1,8 +1,7 @@
 ﻿'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Hls from 'hls.js'
 
 const API = 'https://vms-platform-production.up.railway.app'
 
@@ -13,207 +12,42 @@ interface Camera {
   ativo: boolean
 }
 
-interface StreamStatus {
-  iniciando: boolean
-  ativo: boolean
-  erro: string | null
+interface Empresa {
+  id: string
+  nome: string
+  email: string
 }
 
-function CameraPlayer({ camera }: { camera: Camera }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const hlsRef = useRef<Hls | null>(null)
-  const [status, setStatus] = useState<StreamStatus>({
-    iniciando: false,
-    ativo: false,
-    erro: null,
-  })
-  const [snapshot, setSnapshot] = useState<string | null>(null)
-
-  // Carrega snapshot ao montar
-  useEffect(() => {
-    setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
-  }, [camera.id])
-
-  async function iniciarStream() {
-    setStatus({ iniciando: true, ativo: false, erro: null })
-
-    try {
-      // Passo 1 — pede pro backend iniciar o FFmpeg
-      const res = await fetch(`${API}/cameras/${camera.id}/stream/iniciar`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const erro = await res.json()
-        throw new Error(erro.detail || 'Erro ao iniciar stream')
-      }
-
-      const data = await res.json()
-      const playlistUrl = `${API}${data.playlist}`
-
-      // Passo 2 — conecta o hls.js no elemento <video>
-      if (!videoRef.current) return
-
-      if (Hls.isSupported()) {
-        // Chrome, Firefox, Edge — usa hls.js
-        const hls = new Hls({
-          liveSyncDurationCount: 3,   // Mantém 3 segmentos em buffer
-          liveMaxLatencyDurationCount: 6,
-        })
-        hls.loadSource(playlistUrl)
-        hls.attachMedia(videoRef.current)
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          videoRef.current?.play()
-          setStatus({ iniciando: false, ativo: true, erro: null })
-        })
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            setStatus({ iniciando: false, ativo: false, erro: 'Erro no stream' })
-          }
-        })
-        hlsRef.current = hls
-      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari — suporte nativo HLS
-        videoRef.current.src = playlistUrl
-        videoRef.current.play()
-        setStatus({ iniciando: false, ativo: true, erro: null })
-      }
-    } catch (err: any) {
-      setStatus({ iniciando: false, ativo: false, erro: err.message })
-    }
-  }
-
-  async function pararStream() {
-    // Para o hls.js
-    if (hlsRef.current) {
-      hlsRef.current.destroy()
-      hlsRef.current = null
-    }
-    if (videoRef.current) {
-      videoRef.current.src = ''
-    }
-    // Para o FFmpeg no backend
-    await fetch(`${API}/cameras/${camera.id}/stream/parar`, { method: 'POST' })
-    setStatus({ iniciando: false, ativo: false, erro: null })
-  }
-
-  function atualizarSnapshot() {
-    setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
-  }
-
-  // Limpa ao desmontar
-  useEffect(() => {
-    return () => {
-      if (hlsRef.current) hlsRef.current.destroy()
-    }
-  }, [])
-
+// Modal de confirmação de exclusão
+function ModalConfirmar({
+  nome,
+  onConfirmar,
+  onCancelar,
+}: {
+  nome: string
+  onConfirmar: () => void
+  onCancelar: () => void
+}) {
   return (
-    <div className="bg-gray-800 rounded-xl overflow-hidden">
-      {/* Área de vídeo */}
-      <div className="relative bg-black aspect-video">
-        {/* Video HLS — visível só quando stream ativo */}
-        <video
-          ref={videoRef}
-          className={`w-full h-full object-cover ${status.ativo ? 'block' : 'hidden'}`}
-          muted
-          playsInline
-        />
-
-        {/* Snapshot — visível quando stream inativo */}
-        {!status.ativo && snapshot && (
-          <img
-            src={snapshot}
-            alt={camera.nome}
-            className="w-full h-full object-cover"
-            onError={() => setSnapshot(null)}
-          />
-        )}
-
-        {/* Placeholder quando sem snapshot */}
-        {!status.ativo && !snapshot && (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <div className="text-4xl mb-2">📷</div>
-              <p className="text-sm">Sem sinal</p>
-            </div>
-          </div>
-        )}
-
-        {/* Badge de status */}
-        <div className="absolute top-2 left-2">
-          {status.ativo && (
-            <span className="bg-red-600 text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              AO VIVO
-            </span>
-          )}
-          {status.iniciando && (
-            <span className="bg-yellow-600 text-white text-xs px-2 py-1 rounded-full font-bold">
-              Conectando...
-            </span>
-          )}
-        </div>
-
-        {/* Botão play centralizado quando inativo */}
-        {!status.ativo && !status.iniciando && (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+        <div className="text-4xl mb-4 text-center">🗑️</div>
+        <h2 className="text-xl font-bold text-white text-center mb-2">Deletar câmera?</h2>
+        <p className="text-gray-400 text-center mb-6">
+          Tem certeza que deseja deletar <span className="text-white font-bold">"{nome}"</span>? Esta ação não pode ser desfeita.
+        </p>
+        <div className="flex gap-3">
           <button
-            onClick={iniciarStream}
-            className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition group"
+            onClick={onCancelar}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg font-bold transition"
           >
-            <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center group-hover:scale-110 transition">
-              <span className="text-2xl ml-1">▶</span>
-            </div>
+            Cancelar
           </button>
-        )}
-
-        {/* Loading spinner */}
-        {status.iniciando && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-      </div>
-
-      {/* Info e controles */}
-      <div className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-bold text-white">{camera.nome}</h3>
-          <span className={`text-xs px-2 py-1 rounded-full ${camera.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
-            {camera.ativo ? 'Ativa' : 'Inativa'}
-          </span>
-        </div>
-
-        <p className="text-gray-400 text-xs truncate mb-3">{camera.rtsp_url}</p>
-
-        {status.erro && (
-          <p className="text-red-400 text-xs mb-3">⚠ {status.erro}</p>
-        )}
-
-        <div className="flex gap-2">
-          {status.ativo ? (
-            <button
-              onClick={pararStream}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-bold transition"
-            >
-              ⏹ Parar
-            </button>
-          ) : (
-            <button
-              onClick={iniciarStream}
-              disabled={status.iniciando}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm py-2 rounded-lg font-bold transition"
-            >
-              {status.iniciando ? 'Conectando...' : '▶ Ao Vivo'}
-            </button>
-          )}
           <button
-            onClick={atualizarSnapshot}
-            disabled={status.ativo}
-            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-white text-sm px-3 py-2 rounded-lg transition"
-            title="Atualizar foto"
+            onClick={onConfirmar}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold transition"
           >
-            🔄
+            Deletar
           </button>
         </div>
       </div>
@@ -221,51 +55,255 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   )
 }
 
-export default function CamerasPage() {
+export default function Dashboard() {
   const [cameras, setCameras] = useState<Camera[]>([])
-  const [carregando, setCarregando] = useState(true)
+  const [empresas, setEmpresas] = useState<Empresa[]>([])
+  const [nomeCamera, setNomeCamera] = useState('')
+  const [rtspUrl, setRtspUrl] = useState('')
+  const [empresaId, setEmpresaId] = useState('')
+  const [nomeEmpresa, setNomeEmpresa] = useState('')
+  const [emailEmpresa, setEmailEmpresa] = useState('')
+  const [aba, setAba] = useState('cameras')
+
+  // Estado do modal de confirmação
+  const [cameraParaDeletar, setCameraParaDeletar] = useState<Camera | null>(null)
+  const [deletando, setDeletando] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${API}/cameras/`)
-      .then(r => r.json())
-      .then(data => {
-        setCameras(Array.isArray(data) ? data : [])
-        setCarregando(false)
-      })
-      .catch(() => setCarregando(false))
+    carregarDados()
   }, [])
+
+  async function carregarDados() {
+    try {
+      const [c, e] = await Promise.all([
+        fetch(`${API}/cameras/`).then(r => r.json()),
+        fetch(`${API}/empresas/`).then(r => r.json()),
+      ])
+      setCameras(Array.isArray(c) ? c : [])
+      setEmpresas(Array.isArray(e) ? e : [])
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err)
+      setCameras([])
+      setEmpresas([])
+    }
+  }
+
+  async function criarCamera() {
+    if (!nomeCamera || !rtspUrl || !empresaId) return
+    await fetch(`${API}/cameras/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, empresa_id: empresaId })
+    })
+    setNomeCamera('')
+    setRtspUrl('')
+    setEmpresaId('')
+    carregarDados()
+  }
+
+  async function criarEmpresa() {
+    if (!nomeEmpresa || !emailEmpresa) return
+    await fetch(`${API}/empresas/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: nomeEmpresa, email: emailEmpresa })
+    })
+    setNomeEmpresa('')
+    setEmailEmpresa('')
+    carregarDados()
+  }
+
+  async function deletarCamera(camera: Camera) {
+    setDeletando(camera.id)
+    setCameraParaDeletar(null)
+    try {
+      await fetch(`${API}/cameras/${camera.id}`, { method: 'DELETE' })
+      // Remove da lista localmente sem precisar recarregar tudo
+      setCameras(prev => prev.filter(c => c.id !== camera.id))
+    } catch (err) {
+      console.error('Erro ao deletar câmera:', err)
+    } finally {
+      setDeletando(null)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-6xl mx-auto">
 
+        {/* Modal de confirmação */}
+        {cameraParaDeletar && (
+          <ModalConfirmar
+            nome={cameraParaDeletar.nome}
+            onConfirmar={() => deletarCamera(cameraParaDeletar)}
+            onCancelar={() => setCameraParaDeletar(null)}
+          />
+        )}
+
+        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-blue-400">Câmeras ao Vivo</h1>
-            <p className="text-gray-400 mt-1">{cameras.length} câmera{cameras.length !== 1 ? 's' : ''} cadastrada{cameras.length !== 1 ? 's' : ''}</p>
+            <h1 className="text-3xl font-bold text-blue-400">VMS Platform</h1>
+            <p className="text-gray-400 mt-1">Sistema de monitoramento com IA</p>
           </div>
-          <Link href="/" className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg transition">
-            ← Dashboard
-          </Link>
-        </div>
-
-        {carregando ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : cameras.length === 0 ? (
-          <div className="text-center py-24 text-gray-500">
-            <div className="text-6xl mb-4">📷</div>
-            <p className="text-xl">Nenhuma câmera cadastrada</p>
-            <Link href="/" className="text-blue-400 hover:underline mt-2 block">
-              Cadastrar câmera →
+          <div className="flex gap-2">
+            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
+              📷 Ao Vivo
+            </Link>
+            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold transition">
+              Ver Eventos
             </Link>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {cameras.map(camera => (
-              <CameraPlayer key={camera.id} camera={camera} />
-            ))}
+        </div>
+
+        {/* Cards resumo */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-gray-800 rounded-xl p-4">
+            <p className="text-gray-400 text-sm">Cameras</p>
+            <p className="text-3xl font-bold text-blue-400">{cameras.length}</p>
+          </div>
+          <div className="bg-gray-800 rounded-xl p-4">
+            <p className="text-gray-400 text-sm">Empresas</p>
+            <p className="text-3xl font-bold text-green-400">{empresas.length}</p>
+          </div>
+          <div className="bg-gray-800 rounded-xl p-4">
+            <p className="text-gray-400 text-sm">Status</p>
+            <p className="text-3xl font-bold text-green-400">Online</p>
+          </div>
+        </div>
+
+        {/* Abas */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setAba('cameras')}
+            className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}
+          >
+            Cameras
+          </button>
+          <button
+            onClick={() => setAba('empresas')}
+            className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'empresas' ? 'bg-green-600' : 'bg-gray-800 hover:bg-gray-700'}`}
+          >
+            Empresas
+          </button>
+        </div>
+
+        {/* Aba Cameras */}
+        {aba === 'cameras' && (
+          <div className="grid grid-cols-2 gap-8">
+            {/* Formulário */}
+            <div className="bg-gray-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">Cadastrar Camera</h2>
+              <div className="space-y-3">
+                <input
+                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                  placeholder="Nome da camera"
+                  value={nomeCamera}
+                  onChange={e => setNomeCamera(e.target.value)}
+                />
+                <input
+                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                  placeholder="URL RTSP"
+                  value={rtspUrl}
+                  onChange={e => setRtspUrl(e.target.value)}
+                />
+                <select
+                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
+                  value={empresaId}
+                  onChange={e => setEmpresaId(e.target.value)}
+                >
+                  <option value="">Selecione a empresa</option>
+                  {empresas.map(e => (
+                    <option key={e.id} value={e.id}>{e.nome}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={criarCamera}
+                  className="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 font-bold transition"
+                >
+                  Cadastrar Camera
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de cameras */}
+            <div className="bg-gray-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">Cameras Cadastradas</h2>
+              {cameras.length === 0 ? (
+                <p className="text-gray-400">Nenhuma camera cadastrada ainda.</p>
+              ) : (
+                <div className="space-y-3">
+                  {cameras.map(c => (
+                    <div key={c.id} className="bg-gray-700 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold">{c.nome}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-1 rounded-full ${c.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                            {c.ativo ? 'Ativa' : 'Inativa'}
+                          </span>
+                          {/* Botão deletar */}
+                          <button
+                            onClick={() => setCameraParaDeletar(c)}
+                            disabled={deletando === c.id}
+                            className="text-gray-400 hover:text-red-400 disabled:opacity-50 transition text-lg leading-none"
+                            title="Deletar câmera"
+                          >
+                            {deletando === c.id ? '⏳' : '🗑️'}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-gray-400 text-sm mt-1 truncate">{c.rtsp_url}</p>
+                      <p className="text-gray-500 text-xs mt-1 font-mono">{c.id}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Aba Empresas */}
+        {aba === 'empresas' && (
+          <div className="grid grid-cols-2 gap-8">
+            <div className="bg-gray-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">Cadastrar Empresa</h2>
+              <div className="space-y-3">
+                <input
+                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                  placeholder="Nome da empresa"
+                  value={nomeEmpresa}
+                  onChange={e => setNomeEmpresa(e.target.value)}
+                />
+                <input
+                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                  placeholder="Email da empresa"
+                  value={emailEmpresa}
+                  onChange={e => setEmailEmpresa(e.target.value)}
+                />
+                <button
+                  onClick={criarEmpresa}
+                  className="w-full bg-green-600 hover:bg-green-700 rounded-lg px-4 py-2 font-bold transition"
+                >
+                  Cadastrar Empresa
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-gray-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">Empresas Cadastradas</h2>
+              {empresas.length === 0 ? (
+                <p className="text-gray-400">Nenhuma empresa cadastrada ainda.</p>
+              ) : (
+                <div className="space-y-3">
+                  {empresas.map(e => (
+                    <div key={e.id} className="bg-gray-700 rounded-lg p-3">
+                      <p className="font-bold">{e.nome}</p>
+                      <p className="text-gray-400 text-sm">{e.email}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
