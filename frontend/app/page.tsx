@@ -51,7 +51,6 @@ function ModalConfirmar({
 
 export default function Dashboard() {
   const { usuario, carregando: authCarregando, logout } = useAuth()
-
   const [cameras, setCameras] = useState<Camera[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [nomeCamera, setNomeCamera] = useState('')
@@ -75,7 +74,7 @@ export default function Dashboard() {
       ])
       setCameras(Array.isArray(c) ? c : [])
       setEmpresas(Array.isArray(e) ? e : [])
-    } catch (err) {
+    } catch {
       setCameras([])
       setEmpresas([])
     }
@@ -114,7 +113,6 @@ export default function Dashboard() {
     }
   }
 
-  // Tela de loading enquanto verifica autenticação
   if (authCarregando) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -141,21 +139,25 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold text-blue-400">VMS Platform</h1>
             <p className="text-gray-400 mt-1">Sistema de monitoramento com IA</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {usuario && (
-              <span className="text-gray-400 text-sm hidden md:block">
-                👤 {usuario.nome}
-              </span>
+              <span className="text-gray-400 text-sm hidden md:block">👤 {usuario.nome}</span>
             )}
-            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
+            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">
               📷 Ao Vivo
             </Link>
-            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold transition">
+            <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">
+              📊 Contagem
+            </Link>
+            <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">
+              🌡️ Heatmap
+            </Link>
+            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">
               Ver Eventos
             </Link>
             <button
               onClick={logout}
-              className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300"
+              className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded-lg font-bold transition text-red-300 text-sm"
             >
               Sair
             </button>
