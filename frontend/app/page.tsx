@@ -31,12 +31,18 @@ export default function Dashboard() {
   }, [])
 
   async function carregarDados() {
-    const [c, e] = await Promise.all([
-      fetch('https://vms-platform-production.up.railway.app').then(r => r.json()),
-      fetch('https://vms-platform-production.up.railway.app').then(r => r.json()),
-    ])
-    setCameras(c)
-    setEmpresas(e)
+    try {
+      const [c, e] = await Promise.all([
+        fetch('https://vms-platform-production.up.railway.app/cameras/').then(r => r.json()),
+        fetch('https://vms-platform-production.up.railway.app/empresas/').then(r => r.json()),
+      ])
+      setCameras(Array.isArray(c) ? c : [])
+      setEmpresas(Array.isArray(e) ? e : [])
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err)
+      setCameras([])
+      setEmpresas([])
+    }
   }
 
   async function criarCamera() {
