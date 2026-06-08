@@ -7,7 +7,9 @@ from ultralytics import YOLO
 API_BASE = "https://vms-platform-production.up.railway.app"
 
 # Modelo pose para detecção de pessoas E análise de quedas
+print("Carregando modelo YOLOv8 Pose...", flush=True)
 model_pose = YOLO("yolov8n-pose.pt")
+print("Modelo carregado!", flush=True)
 
 # Índices dos keypoints YOLOv8 Pose
 NOSE        = 0
@@ -177,4 +179,4 @@ def main():
         print("Worker encerrado.")
 
 if __name__ == "__main__":
-    main()
+    main() 
