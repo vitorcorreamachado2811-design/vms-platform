@@ -44,3 +44,15 @@ class Evento(Base):
     confianca = Column(Float)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
     camera = relationship("Camera", back_populates="eventos")
+    class LinhaContagem(Base):
+    __tablename__ = "linhas_contagem"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    camera_id = Column(UUID(as_uuid=True), ForeignKey("cameras.id"), unique=True)
+    # Ponto A da linha (x1, y1) e Ponto B (x2, y2) — coordenadas normalizadas 0-1
+    x1 = Column(Float, nullable=False)
+    y1 = Column(Float, nullable=False)
+    x2 = Column(Float, nullable=False)
+    y2 = Column(Float, nullable=False)
+    criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
+    atualizado_em = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

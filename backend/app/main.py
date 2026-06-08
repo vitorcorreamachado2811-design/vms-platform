@@ -22,3 +22,7 @@ app.include_router(eventos.router, prefix="/eventos", tags=["Eventos"])
 @app.get("/")
 def root():
     return {"status": "ok", "sistema": "VMS Platform"}
+from app.routers import cameras, empresas, auth, eventos, contagem  # adiciona contagem
+
+# E depois dos outros include_router:
+app.include_router(contagem.router, prefix="/contagem", tags=["Contagem"])
