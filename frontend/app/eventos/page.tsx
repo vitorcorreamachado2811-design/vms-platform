@@ -29,9 +29,7 @@ export default function EventosPage() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [cameraSelecionada, setCameraSelecionada] = useState<string>('todas')
 
-  useEffect(() => {
-    carregarDados()
-  }, [])
+  useEffect(() => { carregarDados() }, [])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -41,8 +39,8 @@ export default function EventosPage() {
 
   async function carregarDados() {
     const [e, c] = await Promise.all([
-      fetch('http://localhost:8000/eventos/').then(r => r.json()),
-      fetch('http://localhost:8000/cameras/').then(r => r.json()),
+      fetch('https://vms-platform-production.up.railway.app/eventos/').then(r => r.json()),
+      fetch('https://vms-platform-production.up.railway.app/cameras/').then(r => r.json()),
     ])
     setEventos(e)
     setCameras(c)
@@ -50,7 +48,7 @@ export default function EventosPage() {
   }
 
   async function carregarEventos() {
-    const data = await fetch('http://localhost:8000/eventos/').then(r => r.json())
+    const data = await fetch('https://vms-platform-production.up.railway.app/eventos/').then(r => r.json())
     setEventos(data)
   }
 
