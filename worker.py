@@ -2,6 +2,7 @@
 import threading
 import time
 import numpy as np
+from collections import defaultdict
 from ultralytics import YOLO
 
 API_BASE = "https://vms-platform-production.up.railway.app"
@@ -10,7 +11,6 @@ print("Carregando modelo YOLOv8 Pose...", flush=True)
 model_pose = YOLO("yolov8n-pose.pt")
 print("Modelo carregado!", flush=True)
 
-# Keypoints
 OMBRO_ESQ     = 5
 OMBRO_DIR     = 6
 TORNOZELO_ESQ = 15
@@ -40,8 +40,7 @@ def detectar_queda(box, keypoints):
     altura  = y2 - y1
     if altura == 0 or largura == 0:
         return False
-    ratio = altura / largura
-    if ratio < 0.8:
+    if (altura / largura) < 0.8:
         return True
     if keypoints is not None and len(keypoints) >= 17:
         kp = keypoints
@@ -57,10 +56,6 @@ def detectar_queda(box, keypoints):
     return False
 
 def lado_da_linha(px, py, x1, y1, x2, y2):
-    """
-    Retorna o sinal do produto vetorial.
-    Positivo = lado A, Negativo = lado B.
-    """
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
 def salvar_evento(camera_id, tipo, confianca, nome):
@@ -72,10 +67,26 @@ def salvar_evento(camera_id, tipo, confianca, nome):
         }, timeout=3)
         print(f"[{nome}] {tipo} ({confianca:.0%})", flush=True)
     except Exception as e:
-        print(f"[{nome}] Erro ao salvar: {e}", flush=True)
+        print(f"[{nome}] Erro evento: {e}", flush=True)
+
+def enviar_heatmap(camera_id, acumulador, nome):
+    """Envia batch de pontos do heatmap para o backend."""
+    if not acumulador:
+        return
+    pontos = [
+        {"x": round(x, 3), "y": round(y, 3), "peso": float(p)}
+        for (x, y), p in acumulador.items()
+    ]
+    try:
+        requests.post(f"{API_BASE}/heatmap/batch", json={
+            "camera_id": camera_id,
+            "pontos": pontos
+        }, timeout=5)
+        print(f"[{nome}] Heatmap enviado: {len(pontos)} pontos", flush=True)
+    except Exception as e:
+        print(f"[{nome}] Erro heatmap: {e}", flush=True)
 
 def buscar_linha(camera_id):
-    """Busca a linha de contagem configurada para a câmera."""
     try:
         r = requests.get(f"{API_BASE}/contagem/{camera_id}", timeout=5)
         if r.status_code == 200:
@@ -85,7 +96,6 @@ def buscar_linha(camera_id):
     return None
 
 def iou(boxA, boxB):
-    """Calcula IoU entre dois bounding boxes para rastreamento."""
     xA = max(boxA[0], boxB[0])
     yA = max(boxA[1], boxB[1])
     xB = min(boxA[2], boxB[2])
@@ -102,23 +112,31 @@ def processar_camera(camera):
     nome      = camera["nome"]
     rtsp_url  = camera["rtsp_url"]
 
-    print(f"[{nome}] Iniciando com detecção de pose + quedas...", flush=True)
+    print(f"[{nome}] Iniciando com pose + quedas + heatmap...", flush=True)
 
-    # Rastreamento: dict de tracks {track_id: {box, lado_anterior}}
     tracks = {}
     next_id = 0
     linha = None
-    linha_refresh = 0  # timestamp do último refresh da linha
+    linha_refresh = 0
+
+    # Acumulador do heatmap: {(x, y): peso}
+    heatmap_acc = defaultdict(float)
+    heatmap_ultimo_envio = time.time()
 
     while True:
         try:
-            # Atualiza linha a cada 30s
             agora = time.time()
+
+            # Atualiza linha a cada 30s
             if agora - linha_refresh > 30:
                 linha = buscar_linha(camera_id)
                 linha_refresh = agora
-                if linha:
-                    print(f"[{nome}] Linha carregada: ({linha['x1']:.2f},{linha['y1']:.2f}) → ({linha['x2']:.2f},{linha['y2']:.2f})", flush=True)
+
+            # Envia heatmap a cada 60s
+            if agora - heatmap_ultimo_envio > 60:
+                enviar_heatmap(camera_id, dict(heatmap_acc), nome)
+                heatmap_acc.clear()
+                heatmap_ultimo_envio = agora
 
             frame_data = capturar_frame(rtsp_url)
             if frame_data is None:
@@ -136,7 +154,6 @@ def processar_camera(camera):
             h, w = frame.shape[:2]
             results = model_pose(frame, verbose=False)
 
-            # Detecções atuais
             deteccoes = []
             for result in results:
                 for i, box in enumerate(result.boxes):
@@ -151,12 +168,12 @@ def processar_camera(camera):
                         kps = result.keypoints.data[i].cpu().numpy()
                     deteccoes.append({"box": coords, "conf": conf, "kps": kps})
 
-            # Associa detecções aos tracks existentes via IoU
+            # Associa tracks via IoU
             novos_tracks = {}
             usados = set()
 
             for tid, track in tracks.items():
-                melhor_iou = 0.3  # threshold mínimo
+                melhor_iou = 0.3
                 melhor_idx = -1
                 for idx, det in enumerate(deteccoes):
                     if idx in usados:
@@ -170,47 +187,50 @@ def processar_camera(camera):
                     det = deteccoes[melhor_idx]
                     usados.add(melhor_idx)
 
+                    cx = (det["box"][0] + det["box"][2]) / 2 / w
+                    cy = (det["box"][1] + det["box"][3]) / 2 / h
+
+                    # Acumula no heatmap (célula de 2%)
+                    hx = round(cx / 0.02) * 0.02
+                    hy = round(cy / 0.02) * 0.02
+                    heatmap_acc[(hx, hy)] += 1
+
                     # Verifica queda
                     if detectar_queda(det["box"], det["kps"]):
                         salvar_evento(camera_id, "queda", det["conf"], nome)
 
                     # Verifica cruzamento de linha
                     if linha:
-                        cx = (det["box"][0] + det["box"][2]) / 2 / w
-                        cy = (det["box"][1] + det["box"][3]) / 2 / h
-                        lado_atual = lado_da_linha(
-                            cx, cy,
+                        lado_atual = lado_da_linha(cx, cy,
                             linha["x1"], linha["y1"],
-                            linha["x2"], linha["y2"]
-                        )
+                            linha["x2"], linha["y2"])
                         lado_ant = track.get("lado")
                         if lado_ant is not None and lado_atual != 0:
                             if lado_ant > 0 and lado_atual < 0:
                                 salvar_evento(camera_id, "entrada", det["conf"], nome)
                             elif lado_ant < 0 and lado_atual > 0:
                                 salvar_evento(camera_id, "saida", det["conf"], nome)
-
                         novos_tracks[tid] = {
                             "box": det["box"],
                             "lado": lado_atual if lado_atual != 0 else track.get("lado")
                         }
                     else:
-                        # Sem linha — só detecta pessoa
                         salvar_evento(camera_id, "person", det["conf"], nome)
                         novos_tracks[tid] = {"box": det["box"], "lado": None}
 
-            # Novas detecções sem track
+            # Novos tracks
             for idx, det in enumerate(deteccoes):
                 if idx not in usados:
+                    cx = (det["box"][0] + det["box"][2]) / 2 / w
+                    cy = (det["box"][1] + det["box"][3]) / 2 / h
+                    hx = round(cx / 0.02) * 0.02
+                    hy = round(cy / 0.02) * 0.02
+                    heatmap_acc[(hx, hy)] += 1
                     lado_ini = None
                     if linha:
-                        cx = (det["box"][0] + det["box"][2]) / 2 / w
-                        cy = (det["box"][1] + det["box"][3]) / 2 / h
-                        lado_ini = lado_da_linha(
-                            cx, cy,
+                        lado_ini = lado_da_linha(cx, cy,
                             linha["x1"], linha["y1"],
-                            linha["x2"], linha["y2"]
-                        )
+                            linha["x2"], linha["y2"])
                     novos_tracks[next_id] = {"box": det["box"], "lado": lado_ini}
                     next_id += 1
 
@@ -222,7 +242,7 @@ def processar_camera(camera):
             time.sleep(10)
 
 def main():
-    print("VMS Worker iniciando com YOLOv8 Pose + Detecção de Quedas...", flush=True)
+    print("VMS Worker iniciando com YOLOv8 Pose + Quedas + Heatmap...", flush=True)
     while True:
         try:
             resp    = requests.get(f"{API_BASE}/cameras/", timeout=10)
