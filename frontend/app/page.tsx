@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useAuth } from './hooks/useAuth'
 
 const API = 'https://vms-platform-production.up.railway.app'
 
@@ -18,7 +19,6 @@ interface Empresa {
   email: string
 }
 
-// Modal de confirmação de exclusão
 function ModalConfirmar({
   nome,
   onConfirmar,
@@ -37,16 +37,10 @@ function ModalConfirmar({
           Tem certeza que deseja deletar <span className="text-white font-bold">"{nome}"</span>? Esta ação não pode ser desfeita.
         </p>
         <div className="flex gap-3">
-          <button
-            onClick={onCancelar}
-            className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg font-bold transition"
-          >
+          <button onClick={onCancelar} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg font-bold transition">
             Cancelar
           </button>
-          <button
-            onClick={onConfirmar}
-            className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold transition"
-          >
+          <button onClick={onConfirmar} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold transition">
             Deletar
           </button>
         </div>
@@ -56,6 +50,8 @@ function ModalConfirmar({
 }
 
 export default function Dashboard() {
+  const { usuario, carregando: authCarregando, logout } = useAuth()
+
   const [cameras, setCameras] = useState<Camera[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [nomeCamera, setNomeCamera] = useState('')
@@ -64,14 +60,12 @@ export default function Dashboard() {
   const [nomeEmpresa, setNomeEmpresa] = useState('')
   const [emailEmpresa, setEmailEmpresa] = useState('')
   const [aba, setAba] = useState('cameras')
-
-  // Estado do modal de confirmação
   const [cameraParaDeletar, setCameraParaDeletar] = useState<Camera | null>(null)
   const [deletando, setDeletando] = useState<string | null>(null)
 
   useEffect(() => {
-    carregarDados()
-  }, [])
+    if (!authCarregando) carregarDados()
+  }, [authCarregando])
 
   async function carregarDados() {
     try {
@@ -82,7 +76,6 @@ export default function Dashboard() {
       setCameras(Array.isArray(c) ? c : [])
       setEmpresas(Array.isArray(e) ? e : [])
     } catch (err) {
-      console.error('Erro ao carregar dados:', err)
       setCameras([])
       setEmpresas([])
     }
@@ -95,9 +88,7 @@ export default function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, empresa_id: empresaId })
     })
-    setNomeCamera('')
-    setRtspUrl('')
-    setEmpresaId('')
+    setNomeCamera(''); setRtspUrl(''); setEmpresaId('')
     carregarDados()
   }
 
@@ -108,8 +99,7 @@ export default function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome: nomeEmpresa, email: emailEmpresa })
     })
-    setNomeEmpresa('')
-    setEmailEmpresa('')
+    setNomeEmpresa(''); setEmailEmpresa('')
     carregarDados()
   }
 
@@ -118,20 +108,25 @@ export default function Dashboard() {
     setCameraParaDeletar(null)
     try {
       await fetch(`${API}/cameras/${camera.id}`, { method: 'DELETE' })
-      // Remove da lista localmente sem precisar recarregar tudo
       setCameras(prev => prev.filter(c => c.id !== camera.id))
-    } catch (err) {
-      console.error('Erro ao deletar câmera:', err)
     } finally {
       setDeletando(null)
     }
+  }
+
+  // Tela de loading enquanto verifica autenticação
+  if (authCarregando) {
+    return (
+      <main className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </main>
+    )
   }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-8">
       <div className="max-w-6xl mx-auto">
 
-        {/* Modal de confirmação */}
         {cameraParaDeletar && (
           <ModalConfirmar
             nome={cameraParaDeletar.nome}
@@ -146,13 +141,24 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold text-blue-400">VMS Platform</h1>
             <p className="text-gray-400 mt-1">Sistema de monitoramento com IA</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            {usuario && (
+              <span className="text-gray-400 text-sm hidden md:block">
+                👤 {usuario.nome}
+              </span>
+            )}
             <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
               📷 Ao Vivo
             </Link>
             <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold transition">
               Ver Eventos
             </Link>
+            <button
+              onClick={logout}
+              className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300"
+            >
+              Sair
+            </button>
           </div>
         </div>
 
@@ -191,7 +197,6 @@ export default function Dashboard() {
         {/* Aba Cameras */}
         {aba === 'cameras' && (
           <div className="grid grid-cols-2 gap-8">
-            {/* Formulário */}
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-xl font-bold mb-4">Cadastrar Camera</h2>
               <div className="space-y-3">
@@ -226,7 +231,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Lista de cameras */}
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-xl font-bold mb-4">Cameras Cadastradas</h2>
               {cameras.length === 0 ? (
@@ -241,11 +245,10 @@ export default function Dashboard() {
                           <span className={`text-xs px-2 py-1 rounded-full ${c.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
                             {c.ativo ? 'Ativa' : 'Inativa'}
                           </span>
-                          {/* Botão deletar */}
                           <button
                             onClick={() => setCameraParaDeletar(c)}
                             disabled={deletando === c.id}
-                            className="text-gray-400 hover:text-red-400 disabled:opacity-50 transition text-lg leading-none"
+                            className="text-gray-400 hover:text-red-400 disabled:opacity-50 transition text-lg"
                             title="Deletar câmera"
                           >
                             {deletando === c.id ? '⏳' : '🗑️'}
