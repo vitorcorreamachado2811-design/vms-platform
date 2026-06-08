@@ -41,7 +41,7 @@ export default function Dashboard() {
 
   async function criarCamera() {
     if (!nomeCamera || !rtspUrl || !empresaId) return
-    await fetch('http://localhost:8000/cameras/', {
+    await fetch('https://vms-platform-production.up.railway.app/cameras/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, empresa_id: empresaId })
@@ -54,7 +54,7 @@ export default function Dashboard() {
 
   async function criarEmpresa() {
     if (!nomeEmpresa || !emailEmpresa) return
-    await fetch('http://localhost:8000/empresas/', {
+    await fetch('https://vms-platform-production.up.railway.app/empresas/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome: nomeEmpresa, email: emailEmpresa })
