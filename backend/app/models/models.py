@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float
+﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -65,12 +65,11 @@ class HeatmapPonto(Base):
     peso = Column(Float, default=1.0)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
 
-    class RegiaoMonitorada(Base):
+class RegiaoMonitorada(Base):
     __tablename__ = "regioes_monitoradas"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     camera_id = Column(UUID(as_uuid=True), ForeignKey("cameras.id"))
-    tipo = Column(String, nullable=False)  # "cama", "area_risco", etc
-    # Retângulo normalizado 0-1
+    tipo = Column(String, nullable=False)
     x1 = Column(Float, nullable=False)
     y1 = Column(Float, nullable=False)
     x2 = Column(Float, nullable=False)
