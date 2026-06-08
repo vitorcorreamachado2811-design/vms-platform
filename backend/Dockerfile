@@ -13,7 +13,6 @@ COPY . .
 
 RUN mkdir -p /tmp/hls
 
-EXPOSE 8000
+RUN chmod +x start.sh
 
-# Shell form (sem colchetes) — permite expansão de variável $PORT
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+ENTRYPOINT ["sh", "start.sh"]
