@@ -32,8 +32,8 @@ export default function Dashboard() {
 
   async function carregarDados() {
     const [c, e] = await Promise.all([
-      fetch('http://localhost:8000/cameras/').then(r => r.json()),
-      fetch('http://localhost:8000/empresas/').then(r => r.json()),
+      fetch('https://vms-platform-production.up.railway.app').then(r => r.json()),
+      fetch('https://vms-platform-production.up.railway.app').then(r => r.json()),
     ])
     setCameras(c)
     setEmpresas(e)
