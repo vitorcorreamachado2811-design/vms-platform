@@ -11,10 +11,15 @@ print("Carregando modelo YOLOv8 Pose...", flush=True)
 model_pose = YOLO("yolov8n-pose.pt")
 print("Modelo carregado!", flush=True)
 
+# Keypoints YOLOv8 Pose
 OMBRO_ESQ     = 5
 OMBRO_DIR     = 6
+QUADRIL_ESQ   = 11
+QUADRIL_DIR   = 12
 TORNOZELO_ESQ = 15
 TORNOZELO_DIR = 16
+PULSO_ESQ     = 9
+PULSO_DIR     = 10
 
 def capturar_frame(rtsp_url):
     import subprocess
@@ -34,14 +39,17 @@ def capturar_frame(rtsp_url):
         print(f"Erro ffmpeg: {e}", flush=True)
     return None
 
-def detectar_queda(box, keypoints):
+def pessoa_horizontal(box, keypoints):
+    """Detecta se a pessoa está deitada/caída."""
     x1, y1, x2, y2 = box
     largura = x2 - x1
     altura  = y2 - y1
     if altura == 0 or largura == 0:
         return False
+    # Critério 1: bounding box horizontal
     if (altura / largura) < 0.8:
         return True
+    # Critério 2: ombros na mesma altura dos tornozelos
     if keypoints is not None and len(keypoints) >= 17:
         kp = keypoints
         ombro_y = None
@@ -55,6 +63,11 @@ def detectar_queda(box, keypoints):
                 return True
     return False
 
+def pessoa_na_regiao(cx, cy, regiao):
+    """Verifica se o centro da pessoa está dentro de uma região."""
+    return (regiao["x1"] <= cx <= regiao["x2"] and
+            regiao["y1"] <= cy <= regiao["y2"])
+
 def lado_da_linha(px, py, x1, y1, x2, y2):
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
@@ -65,12 +78,11 @@ def salvar_evento(camera_id, tipo, confianca, nome):
             "tipo": tipo,
             "confianca": round(confianca, 2)
         }, timeout=3)
-        print(f"[{nome}] {tipo} ({confianca:.0%})", flush=True)
+        print(f"[{nome}] ⚠️ {tipo} ({confianca:.0%})", flush=True)
     except Exception as e:
         print(f"[{nome}] Erro evento: {e}", flush=True)
 
 def enviar_heatmap(camera_id, acumulador, nome):
-    """Envia batch de pontos do heatmap para o backend."""
     if not acumulador:
         return
     pontos = [
@@ -82,18 +94,27 @@ def enviar_heatmap(camera_id, acumulador, nome):
             "camera_id": camera_id,
             "pontos": pontos
         }, timeout=5)
-        print(f"[{nome}] Heatmap enviado: {len(pontos)} pontos", flush=True)
+        print(f"[{nome}] Heatmap: {len(pontos)} pontos enviados", flush=True)
     except Exception as e:
         print(f"[{nome}] Erro heatmap: {e}", flush=True)
 
-def buscar_linha(camera_id):
+def buscar_configuracoes(camera_id):
+    """Busca linha de contagem e regiões monitoradas."""
+    linha = None
+    regioes = []
     try:
         r = requests.get(f"{API_BASE}/contagem/{camera_id}", timeout=5)
         if r.status_code == 200:
-            return r.json()
+            linha = r.json()
     except:
         pass
-    return None
+    try:
+        r = requests.get(f"{API_BASE}/regioes/{camera_id}", timeout=5)
+        if r.status_code == 200:
+            regioes = r.json()
+    except:
+        pass
+    return linha, regioes
 
 def iou(boxA, boxB):
     xA = max(boxA[0], boxB[0])
@@ -112,25 +133,32 @@ def processar_camera(camera):
     nome      = camera["nome"]
     rtsp_url  = camera["rtsp_url"]
 
-    print(f"[{nome}] Iniciando com pose + quedas + heatmap...", flush=True)
+    print(f"[{nome}] Iniciando monitoramento de idosos...", flush=True)
 
     tracks = {}
     next_id = 0
     linha = None
-    linha_refresh = 0
-
-    # Acumulador do heatmap: {(x, y): peso}
+    regioes = []
+    config_refresh = 0
     heatmap_acc = defaultdict(float)
     heatmap_ultimo_envio = time.time()
+
+    # Cooldown por tipo de alerta — evita spam de eventos
+    # {track_id: {tipo: ultimo_timestamp}}
+    cooldowns = defaultdict(lambda: defaultdict(float))
+    COOLDOWN_SEGUNDOS = 30
 
     while True:
         try:
             agora = time.time()
 
-            # Atualiza linha a cada 30s
-            if agora - linha_refresh > 30:
-                linha = buscar_linha(camera_id)
-                linha_refresh = agora
+            # Atualiza configurações a cada 30s
+            if agora - config_refresh > 30:
+                linha, regioes = buscar_configuracoes(camera_id)
+                config_refresh = agora
+                cama = next((r for r in regioes if r["tipo"] == "cama"), None)
+                if cama:
+                    print(f"[{nome}] Região da cama carregada", flush=True)
 
             # Envia heatmap a cada 60s
             if agora - heatmap_ultimo_envio > 60:
@@ -168,6 +196,9 @@ def processar_camera(camera):
                         kps = result.keypoints.data[i].cpu().numpy()
                     deteccoes.append({"box": coords, "conf": conf, "kps": kps})
 
+            # Região da cama atual
+            cama = next((r for r in regioes if r["tipo"] == "cama"), None)
+
             # Associa tracks via IoU
             novos_tracks = {}
             usados = set()
@@ -190,16 +221,34 @@ def processar_camera(camera):
                     cx = (det["box"][0] + det["box"][2]) / 2 / w
                     cy = (det["box"][1] + det["box"][3]) / 2 / h
 
-                    # Acumula no heatmap (célula de 2%)
+                    # Acumula heatmap
                     hx = round(cx / 0.02) * 0.02
                     hy = round(cy / 0.02) * 0.02
                     heatmap_acc[(hx, hy)] += 1
 
-                    # Verifica queda
-                    if detectar_queda(det["box"], det["kps"]):
-                        salvar_evento(camera_id, "queda", det["conf"], nome)
+                    horizontal = pessoa_horizontal(det["box"], det["kps"])
+                    na_cama = cama and pessoa_na_regiao(cx, cy, cama)
+                    estava_na_cama = track.get("na_cama", False)
 
-                    # Verifica cruzamento de linha
+                    def pode_alertar(tipo):
+                        ultimo = cooldowns[tid][tipo]
+                        return agora - ultimo > COOLDOWN_SEGUNDOS
+
+                    # Detecta queda do leito
+                    # Estava na cama, agora está fora E horizontal
+                    if estava_na_cama and not na_cama and horizontal:
+                        if pode_alertar("queda_leito"):
+                            salvar_evento(camera_id, "queda_leito", det["conf"], nome)
+                            cooldowns[tid]["queda_leito"] = agora
+
+                    # Detecta queda em pé
+                    # Não estava na cama, está horizontal
+                    elif not na_cama and horizontal and not estava_na_cama:
+                        if pode_alertar("queda_pe"):
+                            salvar_evento(camera_id, "queda_pe", det["conf"], nome)
+                            cooldowns[tid]["queda_pe"] = agora
+
+                    # Linha de contagem
                     if linha:
                         lado_atual = lado_da_linha(cx, cy,
                             linha["x1"], linha["y1"],
@@ -210,13 +259,21 @@ def processar_camera(camera):
                                 salvar_evento(camera_id, "entrada", det["conf"], nome)
                             elif lado_ant < 0 and lado_atual > 0:
                                 salvar_evento(camera_id, "saida", det["conf"], nome)
-                        novos_tracks[tid] = {
-                            "box": det["box"],
-                            "lado": lado_atual if lado_atual != 0 else track.get("lado")
-                        }
-                    else:
-                        salvar_evento(camera_id, "person", det["conf"], nome)
-                        novos_tracks[tid] = {"box": det["box"], "lado": None}
+
+                    novos_tracks[tid] = {
+                        "box": det["box"],
+                        "lado": lado_da_linha(cx, cy,
+                            linha["x1"], linha["y1"],
+                            linha["x2"], linha["y2"]) if linha else None,
+                        "na_cama": na_cama,
+                        "horizontal": horizontal,
+                    }
+
+                    # Pessoa normal — sem queda
+                    if not horizontal and not na_cama:
+                        if pode_alertar("person"):
+                            salvar_evento(camera_id, "person", det["conf"], nome)
+                            cooldowns[tid]["person"] = agora
 
             # Novos tracks
             for idx, det in enumerate(deteccoes):
@@ -226,12 +283,18 @@ def processar_camera(camera):
                     hx = round(cx / 0.02) * 0.02
                     hy = round(cy / 0.02) * 0.02
                     heatmap_acc[(hx, hy)] += 1
+                    na_cama = cama and pessoa_na_regiao(cx, cy, cama)
                     lado_ini = None
                     if linha:
                         lado_ini = lado_da_linha(cx, cy,
                             linha["x1"], linha["y1"],
                             linha["x2"], linha["y2"])
-                    novos_tracks[next_id] = {"box": det["box"], "lado": lado_ini}
+                    novos_tracks[next_id] = {
+                        "box": det["box"],
+                        "lado": lado_ini,
+                        "na_cama": na_cama,
+                        "horizontal": pessoa_horizontal(det["box"], det["kps"]),
+                    }
                     next_id += 1
 
             tracks = novos_tracks
@@ -242,7 +305,7 @@ def processar_camera(camera):
             time.sleep(10)
 
 def main():
-    print("VMS Worker iniciando com YOLOv8 Pose + Quedas + Heatmap...", flush=True)
+    print("VMS Worker — Monitoramento de Idosos iniciando...", flush=True)
     while True:
         try:
             resp    = requests.get(f"{API_BASE}/cameras/", timeout=10)

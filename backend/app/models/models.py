@@ -64,3 +64,15 @@ class HeatmapPonto(Base):
     y = Column(Float, nullable=False)
     peso = Column(Float, default=1.0)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
+
+    class RegiaoMonitorada(Base):
+    __tablename__ = "regioes_monitoradas"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    camera_id = Column(UUID(as_uuid=True), ForeignKey("cameras.id"))
+    tipo = Column(String, nullable=False)  # "cama", "area_risco", etc
+    # Retângulo normalizado 0-1
+    x1 = Column(Float, nullable=False)
+    y1 = Column(Float, nullable=False)
+    x2 = Column(Float, nullable=False)
+    y2 = Column(Float, nullable=False)
+    criado_em = Column(DateTime, default=lambda: datetime.now(UTC))

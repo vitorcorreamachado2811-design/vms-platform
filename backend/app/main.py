@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import cameras, empresas, auth, eventos, contagem, heatmap
+from app.routers import cameras, empresas, auth, eventos, contagem, heatmap, regioes
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,6 +20,7 @@ app.include_router(auth.router, prefix="/auth", tags=["Autenticação"])
 app.include_router(eventos.router, prefix="/eventos", tags=["Eventos"])
 app.include_router(contagem.router, prefix="/contagem", tags=["Contagem"])
 app.include_router(heatmap.router, prefix="/heatmap", tags=["Heatmap"])
+app.include_router(regioes.router, prefix="/regioes", tags=["Regiões"])
 
 @app.get("/")
 def root():
