@@ -55,13 +55,12 @@ class LinhaContagem(Base):
     y2 = Column(Float, nullable=False)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
     atualizado_em = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
-    class HeatmapPonto(Base):
+
+class HeatmapPonto(Base):
     __tablename__ = "heatmap_pontos"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     camera_id = Column(UUID(as_uuid=True), ForeignKey("cameras.id"))
-    # Coordenadas normalizadas 0-1
     x = Column(Float, nullable=False)
     y = Column(Float, nullable=False)
-    # Peso — quantas vezes essa posição foi detectada neste batch
     peso = Column(Float, default=1.0)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
