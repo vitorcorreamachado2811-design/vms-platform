@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -13,6 +13,7 @@ interface Evento {
   tipo: string
   confianca: number
   criado_em: string
+  video_url?: string // ← NOVO
 }
 
 interface Camera {
@@ -27,6 +28,7 @@ export default function EventosPage() {
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [cameraSelecionada, setCameraSelecionada] = useState<string>('todas')
+  const [videoAberto, setVideoAberto] = useState<string | null>(null) // ← NOVO
 
   useEffect(() => {
     if (!authCarregando) carregarDados()
@@ -255,48 +257,78 @@ export default function EventosPage() {
               <p className="text-xs mt-1">O worker YOLO detecta pessoas automaticamente 24/7.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-400 border-b border-gray-700 text-left">
-                    <th className="pb-3 pr-4">Tipo</th>
-                    <th className="pb-3 pr-4">Confiança</th>
-                    <th className="pb-3 pr-4">Câmera</th>
-                    <th className="pb-3">Data/Hora (BRT)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {eventosFiltrados.map(evento => (
-                    <tr
-                      key={evento.id}
-                      className={`border-b border-gray-700 transition ${
-                        evento.tipo === 'queda'
-                          ? 'bg-red-900/20 hover:bg-red-900/30'
-                          : 'hover:bg-gray-700/50'
-                      }`}
-                    >
-                      <td className="py-3 pr-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                          evento.tipo === 'queda'
-                            ? 'bg-red-900 text-red-300 animate-pulse'
-                            : 'bg-blue-900 text-blue-300'
-                        }`}>
-                          {evento.tipo === 'queda' ? '⚠️ QUEDA' : evento.tipo}
-                        </span>
-                      </td>
-                      <td className={`py-3 pr-4 font-bold ${corConfianca(evento.confianca)}`}>
-                        {(evento.confianca * 100).toFixed(0)}%
-                      </td>
-                      <td className="py-3 pr-4 text-gray-300 text-xs">
-                        {nomeDaCamera(evento.camera_id)}
-                      </td>
-                      <td className="py-3 text-gray-300">
-                        {formatarData(evento.criado_em)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {eventosFiltrados.map(evento => (
+                <div
+                  key={evento.id}
+                  className={`rounded-xl border transition ${
+                    evento.tipo === 'queda' || evento.tipo === 'queda_leito' || evento.tipo === 'queda_pe'
+                      ? 'bg-red-900/20 border-red-500/30 hover:bg-red-900/30'
+                      : 'bg-gray-700/40 border-gray-700 hover:bg-gray-700/60'
+                  }`}
+                >
+                  {/* Linha principal */}
+                  <div className="flex items-center gap-4 px-4 py-3">
+                    {/* Tipo */}
+                    <div className="w-36">
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                        evento.tipo === 'queda' || evento.tipo === 'queda_leito' || evento.tipo === 'queda_pe'
+                          ? 'bg-red-900 text-red-300 animate-pulse'
+                          : 'bg-blue-900 text-blue-300'
+                      }`}>
+                        {evento.tipo === 'queda' || evento.tipo === 'queda_leito' || evento.tipo === 'queda_pe'
+                          ? '⚠️ ' + evento.tipo.toUpperCase().replace('_', ' ')
+                          : evento.tipo}
+                      </span>
+                    </div>
+
+                    {/* Confiança */}
+                    <div className={`w-16 font-bold text-sm ${corConfianca(evento.confianca)}`}>
+                      {(evento.confianca * 100).toFixed(0)}%
+                    </div>
+
+                    {/* Câmera */}
+                    <div className="flex-1 text-gray-300 text-xs">
+                      📷 {nomeDaCamera(evento.camera_id)}
+                    </div>
+
+                    {/* Data */}
+                    <div className="text-gray-400 text-xs">
+                      {formatarData(evento.criado_em)}
+                    </div>
+
+                    {/* Botão vídeo */}
+                    {evento.video_url ? (
+                      <button
+                        onClick={() => setVideoAberto(videoAberto === evento.id ? null : evento.id)}
+                        className="flex items-center gap-1 bg-purple-700 hover:bg-purple-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition"
+                      >
+                        {videoAberto === evento.id ? '⏹ Fechar' : '▶ Ver clipe'}
+                      </button>
+                    ) : (
+                      <span className="text-gray-600 text-xs px-3 py-1.5">⏳ Sem vídeo</span>
+                    )}
+                  </div>
+
+                  {/* Player de vídeo (expansível) */}
+                  {evento.video_url && videoAberto === evento.id && (
+                    <div className="px-4 pb-4">
+                      <div className="bg-black rounded-lg overflow-hidden">
+                        <video
+                          src={evento.video_url}
+                          controls
+                          autoPlay
+                          className="w-full max-h-72"
+                          preload="metadata"
+                        />
+                      </div>
+                      <p className="text-gray-500 text-xs mt-2 text-center">
+                        Clipe: 10s antes + 10s depois do evento
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
