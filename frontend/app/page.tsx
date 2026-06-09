@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -23,10 +23,12 @@ function ModalConfirmar({
   nome,
   onConfirmar,
   onCancelar,
+  deletando,
 }: {
   nome: string
   onConfirmar: () => void
   onCancelar: () => void
+  deletando: boolean
 }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -37,11 +39,24 @@ function ModalConfirmar({
           Tem certeza que deseja deletar <span className="text-white font-bold">"{nome}"</span>? Esta ação não pode ser desfeita.
         </p>
         <div className="flex gap-3">
-          <button onClick={onCancelar} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg font-bold transition">
+          <button
+            onClick={onCancelar}
+            disabled={deletando}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition"
+          >
             Cancelar
           </button>
-          <button onClick={onConfirmar} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold transition">
-            Deletar
+          <button
+            onClick={onConfirmar}
+            disabled={deletando}
+            className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
+          >
+            {deletando ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Deletando...
+              </>
+            ) : 'Deletar'}
           </button>
         </div>
       </div>
@@ -60,7 +75,9 @@ export default function Dashboard() {
   const [emailEmpresa, setEmailEmpresa] = useState('')
   const [aba, setAba] = useState('cameras')
   const [cameraParaDeletar, setCameraParaDeletar] = useState<Camera | null>(null)
-  const [deletando, setDeletando] = useState<string | null>(null)
+  const [deletando, setDeletando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const [criando, setCriando] = useState(false)
 
   useEffect(() => {
     if (!authCarregando) carregarDados()
@@ -82,34 +99,64 @@ export default function Dashboard() {
 
   async function criarCamera() {
     if (!nomeCamera || !rtspUrl || !empresaId) return
-    await fetch(`${API}/cameras/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, empresa_id: empresaId })
-    })
-    setNomeCamera(''); setRtspUrl(''); setEmpresaId('')
-    carregarDados()
+    setCriando(true)
+    setErro(null)
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10000)
+      const res = await fetch(`${API}/cameras/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, empresa_id: empresaId }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      if (!res.ok) throw new Error('Erro ao cadastrar câmera')
+      setNomeCamera(''); setRtspUrl(''); setEmpresaId('')
+      await carregarDados()
+    } catch (e: any) {
+      setErro(e.name === 'AbortError' ? 'Timeout — tente novamente' : 'Erro ao cadastrar câmera')
+    } finally {
+      setCriando(false)
+    }
   }
 
   async function criarEmpresa() {
     if (!nomeEmpresa || !emailEmpresa) return
-    await fetch(`${API}/empresas/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: nomeEmpresa, email: emailEmpresa })
-    })
-    setNomeEmpresa(''); setEmailEmpresa('')
-    carregarDados()
+    setErro(null)
+    try {
+      await fetch(`${API}/empresas/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nomeEmpresa, email: emailEmpresa })
+      })
+      setNomeEmpresa(''); setEmailEmpresa('')
+      await carregarDados()
+    } catch {
+      setErro('Erro ao cadastrar empresa')
+    }
   }
 
   async function deletarCamera(camera: Camera) {
-    setDeletando(camera.id)
-    setCameraParaDeletar(null)
+    setDeletando(true)
+    setErro(null)
     try {
-      await fetch(`${API}/cameras/${camera.id}`, { method: 'DELETE' })
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 8000) // timeout 8s
+      const res = await fetch(`${API}/cameras/${camera.id}`, {
+        method: 'DELETE',
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      if (!res.ok) throw new Error('Erro ao deletar')
+      // Remove da lista imediatamente sem precisar recarregar
       setCameras(prev => prev.filter(c => c.id !== camera.id))
+      setCameraParaDeletar(null)
+    } catch (e: any) {
+      setErro(e.name === 'AbortError' ? 'Timeout ao deletar — tente novamente' : 'Erro ao deletar câmera')
+      setCameraParaDeletar(null)
     } finally {
-      setDeletando(null)
+      setDeletando(false)
     }
   }
 
@@ -129,7 +176,8 @@ export default function Dashboard() {
           <ModalConfirmar
             nome={cameraParaDeletar.nome}
             onConfirmar={() => deletarCamera(cameraParaDeletar)}
-            onCancelar={() => setCameraParaDeletar(null)}
+            onCancelar={() => !deletando && setCameraParaDeletar(null)}
+            deletando={deletando}
           />
         )}
 
@@ -153,7 +201,10 @@ export default function Dashboard() {
               🌡️ Heatmap
             </Link>
             <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">
-              Ver Eventos
+              ⚡ Eventos
+            </Link>
+            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">
+              🏃 Hábitos
             </Link>
             <button
               onClick={logout}
@@ -164,10 +215,18 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Erro global */}
+        {erro && (
+          <div className="bg-red-900/40 border border-red-500 rounded-xl p-4 mb-6 flex items-center justify-between">
+            <span className="text-red-300">⚠️ {erro}</span>
+            <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 text-xl">×</button>
+          </div>
+        )}
+
         {/* Cards resumo */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Cameras</p>
+            <p className="text-gray-400 text-sm">Câmeras</p>
             <p className="text-3xl font-bold text-blue-400">{cameras.length}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
@@ -186,7 +245,7 @@ export default function Dashboard() {
             onClick={() => setAba('cameras')}
             className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}
           >
-            Cameras
+            Câmeras
           </button>
           <button
             onClick={() => setAba('empresas')}
@@ -200,11 +259,11 @@ export default function Dashboard() {
         {aba === 'cameras' && (
           <div className="grid grid-cols-2 gap-8">
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Cadastrar Camera</h2>
+              <h2 className="text-xl font-bold mb-4">Cadastrar Câmera</h2>
               <div className="space-y-3">
                 <input
                   className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-                  placeholder="Nome da camera"
+                  placeholder="Nome da câmera"
                   value={nomeCamera}
                   onChange={e => setNomeCamera(e.target.value)}
                 />
@@ -226,17 +285,23 @@ export default function Dashboard() {
                 </select>
                 <button
                   onClick={criarCamera}
-                  className="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 font-bold transition"
+                  disabled={criando || !nomeCamera || !rtspUrl || !empresaId}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2"
                 >
-                  Cadastrar Camera
+                  {criando ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Cadastrando...
+                    </>
+                  ) : '+ Cadastrar Câmera'}
                 </button>
               </div>
             </div>
 
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Cameras Cadastradas</h2>
+              <h2 className="text-xl font-bold mb-4">Câmeras Cadastradas</h2>
               {cameras.length === 0 ? (
-                <p className="text-gray-400">Nenhuma camera cadastrada ainda.</p>
+                <p className="text-gray-400">Nenhuma câmera cadastrada ainda.</p>
               ) : (
                 <div className="space-y-3">
                   {cameras.map(c => (
@@ -249,11 +314,10 @@ export default function Dashboard() {
                           </span>
                           <button
                             onClick={() => setCameraParaDeletar(c)}
-                            disabled={deletando === c.id}
-                            className="text-gray-400 hover:text-red-400 disabled:opacity-50 transition text-lg"
+                            className="text-gray-400 hover:text-red-400 transition text-lg"
                             title="Deletar câmera"
                           >
-                            {deletando === c.id ? '⏳' : '🗑️'}
+                            🗑️
                           </button>
                         </div>
                       </div>
@@ -289,7 +353,7 @@ export default function Dashboard() {
                   onClick={criarEmpresa}
                   className="w-full bg-green-600 hover:bg-green-700 rounded-lg px-4 py-2 font-bold transition"
                 >
-                  Cadastrar Empresa
+                  + Cadastrar Empresa
                 </button>
               </div>
             </div>
