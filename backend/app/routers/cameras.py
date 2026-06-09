@@ -169,29 +169,32 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     return camera
 
 @router.delete("/{camera_id}")
-def deletar_camera(camera_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
 
     cid = str(camera_id)
 
-    # Deleta do banco imediatamente
+    # Para processos sem esperar (fire and forget)
+    try:
+        if cid in processos_ffmpeg:
+            processos_ffmpeg[cid].kill()  # kill é mais rápido que terminate
+            del processos_ffmpeg[cid]
+    except:
+        pass
+
+    try:
+        if cid in _snapshot_cache:
+            _snapshot_cache[cid]["rodando"] = False
+            del _snapshot_cache[cid]
+    except:
+        pass
+
+    # Deleta do banco
     db.delete(camera)
     db.commit()
 
-    # Para processos depois de responder
-    def _parar_tudo():
-        try:
-            parar_stream(cid)
-        except:
-            pass
-        try:
-            parar_cache_snapshot(cid)
-        except:
-            pass
-
-    background_tasks.add_task(_parar_tudo)
     return {"mensagem": "Câmera removida"}
 
 # ── SNAPSHOT ──────────────────────────────────────────────────────────────────
