@@ -44,8 +44,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [inicio, setInicio]           = useState<{x: number, y: number} | null>(null)
   const [preview, setPreview]         = useState<{x1:number,y1:number,x2:number,y2:number} | null>(null)
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  const imgRef      = useRef<HTMLImageElement>(null)
+  const intervalRef  = useRef<NodeJS.Timeout | null>(null)
+  const aoVivoRef    = useRef(false)
+  const imgRef       = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Carrega regiões existentes
@@ -65,21 +66,27 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
   }
 
-  // Polling de snapshots ao vivo
+  // Polling encadeado: só pede próximo frame DEPOIS que o atual carregou
+  function proximoFrame() {
+    if (!aoVivoRef.current) return
+    intervalRef.current = setTimeout(() => {
+      setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
+    }, 500) // 500ms após carregar o frame anterior
+  }
+
   function iniciarAoVivo() {
+    aoVivoRef.current = true
     setAoVivo(true)
     setErro(null)
     setCarregando(true)
     atualizarSnapshot()
-    intervalRef.current = setInterval(() => {
-      setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
-    }, 1500) // atualiza a cada 1.5s
   }
 
   function pararAoVivo() {
+    aoVivoRef.current = false
     setAoVivo(false)
     if (intervalRef.current) {
-      clearInterval(intervalRef.current)
+      clearTimeout(intervalRef.current)
       intervalRef.current = null
     }
   }
@@ -87,7 +94,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   // Limpa ao desmontar
   useEffect(() => {
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      aoVivoRef.current = false
+      if (intervalRef.current) clearTimeout(intervalRef.current)
     }
   }, [])
 
@@ -180,7 +188,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             src={snapshot}
             alt={camera.nome}
             className="w-full h-full object-cover"
-            onLoad={() => setCarregando(false)}
+            onLoad={() => { setCarregando(false); proximoFrame() }}
             onError={() => {
               setCarregando(false)
               if (aoVivo) setErro('Sem sinal da câmera')
