@@ -169,17 +169,15 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     return camera
 
 @router.delete("/{camera_id}")
-def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
-    camera = db.query(Camera).filter(Camera.id == camera_id).first()
-    if not camera:
-        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+async def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
+    import asyncio
 
     cid = str(camera_id)
 
-    # Para processos sem esperar (fire and forget)
+    # Para processos imediatamente sem bloquear
     try:
         if cid in processos_ffmpeg:
-            processos_ffmpeg[cid].kill()  # kill é mais rápido que terminate
+            processos_ffmpeg[cid].kill()
             del processos_ffmpeg[cid]
     except:
         pass
@@ -191,9 +189,14 @@ def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     except:
         pass
 
-    # Deleta do banco
-    db.delete(camera)
-    db.commit()
+    # Deleta do banco em thread separada para não bloquear o event loop
+    def _deletar():
+        camera = db.query(Camera).filter(Camera.id == camera_id).first()
+        if camera:
+            db.delete(camera)
+            db.commit()
+
+    await asyncio.get_event_loop().run_in_executor(None, _deletar)
 
     return {"mensagem": "Câmera removida"}
 
