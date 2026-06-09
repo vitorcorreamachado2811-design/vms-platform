@@ -31,6 +31,10 @@ class CameraResponse(BaseModel):
     class Config:
         from_attributes = True
 
+@router.get("/ping")
+def ping():
+    return {"ok": True}
+
 @router.get("/", response_model=list[CameraResponse])
 def listar_cameras(db: Session = Depends(get_db)):
     return db.query(Camera).all()
