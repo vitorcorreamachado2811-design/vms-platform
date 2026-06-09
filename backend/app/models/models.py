@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float
+﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -43,6 +43,7 @@ class Evento(Base):
     tipo = Column(String, nullable=False)
     confianca = Column(Float)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
+    video_url = Column(Text, nullable=True)   # ← NOVO: URL do clipe de vídeo
     camera = relationship("Camera", back_populates="eventos")
 
 class LinhaContagem(Base):

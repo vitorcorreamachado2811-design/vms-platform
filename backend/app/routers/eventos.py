@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 from uuid import UUID
 import uuid
 from datetime import datetime, UTC
-
 from app.database import get_db
 from app.models.models import Evento
 
@@ -15,12 +15,16 @@ class EventoCreate(BaseModel):
     tipo: str
     confianca: float
 
+class EventoUpdate(BaseModel):
+    video_url: Optional[str] = None
+
 class EventoResponse(BaseModel):
     id: UUID
     camera_id: UUID
     tipo: str
     confianca: float
     criado_em: datetime
+    video_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -37,6 +41,15 @@ def criar_evento(evento: EventoCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(novo)
     return novo
+
+@router.patch("/{evento_id}", response_model=EventoResponse)
+def atualizar_evento(evento_id: UUID, body: EventoUpdate, db: Session = Depends(get_db)):
+    evento = db.query(Evento).filter(Evento.id == evento_id).first()
+    if evento and body.video_url:
+        evento.video_url = body.video_url
+        db.commit()
+        db.refresh(evento)
+    return evento
 
 @router.get("/", response_model=list[EventoResponse])
 def listar_eventos(db: Session = Depends(get_db)):
