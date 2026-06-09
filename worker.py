@@ -1,4 +1,4 @@
-﻿import requests
+import requests
 import threading
 import time
 import numpy as np
@@ -44,10 +44,11 @@ COZINHA_DURACAO_MIN  = 10
 # ─────────────────────────────────────────────
 # CONFIGURAÇÕES DE CLIPE DE VÍDEO
 # ─────────────────────────────────────────────
-PRE_EVENTO_SEG = 10
-POS_EVENTO_SEG = 10
-FPS_CLIPE      = 10
-MAX_BUFFER     = PRE_EVENTO_SEG * FPS_CLIPE  # 100 frames por câmera
+PRE_EVENTO_SEG  = 10
+POS_EVENTO_SEG  = 10
+FPS_WORKER      = 0.5   # worker captura 1 frame a cada 2s
+FPS_CLIPE       = 5     # FPS de saída do vídeo (suaviza a reprodução)
+MAX_BUFFER      = int(PRE_EVENTO_SEG / (1.0 / FPS_WORKER))  # ~5 frames pré-evento
 
 # Buffer circular por câmera: {camera_id: deque de frames numpy}
 _buffers: dict = {}
@@ -79,9 +80,9 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
     """
     # 1. Copia frames pré-evento do buffer
     buf = get_buffer(camera_id)
-    frames_pre = list(buf)  # cópia dos frames já capturados
+    frames_pre = list(buf)
 
-    # 2. Captura frames pós-evento (10s)
+    # 2. Captura frames pós-evento (10s) — 1 frame a cada 2s = ~5 frames
     frames_pos = []
     deadline = time.time() + POS_EVENTO_SEG
     while time.time() < deadline:
@@ -91,37 +92,41 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
             frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if frame is not None:
                 frames_pos.append(frame)
-        time.sleep(1.0 / FPS_CLIPE)
+        time.sleep(2.0)  # mesmo ritmo do worker principal
 
     todos_frames = frames_pre + frames_pos
+    n_frames = len(todos_frames)
+    print(f"[CLIPE] {n_frames} frames ({len(frames_pre)} pré + {len(frames_pos)} pós)", flush=True)
+
     if not todos_frames:
         print(f"[CLIPE] Sem frames para evento {evento_id}", flush=True)
         return None
 
-    # 3. Monta vídeo em arquivo temporário
+    # 3. Monta vídeo — usa FPS_CLIPE para reprodução suave
+    # Cada frame real representa 2s de câmera, então FPS_CLIPE=5 = vídeo 2x mais rápido
+    # Ajustamos para FPS real para que 1 frame = 1s de reprodução
     h, w = todos_frames[0].shape[:2]
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp_path = tmp.name
     tmp.close()
 
-    # Arquivo intermediário (avi) e final (mp4 H.264)
-    tmp_avi  = tmp_path.replace(".mp4", ".avi")
-    tmp_path = tmp_path  # mp4 final convertido
+    tmp_avi = tmp_path.replace(".mp4", ".avi")
 
     try:
         import subprocess
 
-        # Grava frames em AVI com codec MJPG (sempre disponível)
+        # Grava AVI com MJPG — 1 frame/s (tempo real da câmera)
         fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-        out = cv2.VideoWriter(tmp_avi, fourcc, FPS_CLIPE, (w, h))
+        out = cv2.VideoWriter(tmp_avi, fourcc, 1, (w, h))
         for f in todos_frames:
             out.write(f)
         out.release()
 
-        # Converte AVI → MP4 H.264 via ffmpeg (compatível com navegadores)
+        # Converte AVI → MP4 H.264 com velocidade 2x para reprodução mais fluida
         result = subprocess.run([
             "ffmpeg", "-y",
             "-i", tmp_avi,
+            "-vf", "setpts=0.5*PTS",   # 2x mais rápido na reprodução
             "-vcodec", "libx264",
             "-preset", "ultrafast",
             "-pix_fmt", "yuv420p",
