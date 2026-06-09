@@ -104,12 +104,34 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
     tmp_path = tmp.name
     tmp.close()
 
+    # Arquivo intermediário (avi) e final (mp4 H.264)
+    tmp_avi  = tmp_path.replace(".mp4", ".avi")
+    tmp_path = tmp_path  # mp4 final convertido
+
     try:
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(tmp_path, fourcc, FPS_CLIPE, (w, h))
+        import subprocess
+
+        # Grava frames em AVI com codec MJPG (sempre disponível)
+        fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+        out = cv2.VideoWriter(tmp_avi, fourcc, FPS_CLIPE, (w, h))
         for f in todos_frames:
             out.write(f)
         out.release()
+
+        # Converte AVI → MP4 H.264 via ffmpeg (compatível com navegadores)
+        result = subprocess.run([
+            "ffmpeg", "-y",
+            "-i", tmp_avi,
+            "-vcodec", "libx264",
+            "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            tmp_path
+        ], capture_output=True, timeout=60)
+
+        if result.returncode != 0:
+            print(f"[CLIPE] Erro ffmpeg: {result.stderr.decode()}", flush=True)
+            return None
 
         # 4. Upload no Supabase Storage
         supabase = get_supabase()
@@ -132,10 +154,11 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
         print(f"[CLIPE] Erro upload: {e}", flush=True)
         return None
     finally:
-        try:
-            os.remove(tmp_path)
-        except:
-            pass
+        for f in [tmp_avi, tmp_path]:
+            try:
+                os.remove(f)
+            except:
+                pass
 
 # ─────────────────────────────────────────────
 # MÓDULO DE HÁBITOS
