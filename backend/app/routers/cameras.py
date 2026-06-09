@@ -63,10 +63,13 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
 def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     return _fazer_delete(camera_id, db)
 
-@router.post("/remover/{camera_id}")
-def remover_camera(camera_id: UUID, db: Session = Depends(get_db)):
-    """Rota POST alternativa para remover câmera."""
-    return _fazer_delete(camera_id, db)
+class RemoverCamera(BaseModel):
+    camera_id: UUID
+
+@router.post("/remover")
+def remover_camera(body: RemoverCamera, db: Session = Depends(get_db)):
+    """Rota POST para remover câmera — ID no body."""
+    return _fazer_delete(body.camera_id, db)
 
 def _fazer_delete(camera_id: UUID, db: Session):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()

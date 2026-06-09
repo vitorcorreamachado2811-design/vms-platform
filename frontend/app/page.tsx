@@ -143,8 +143,10 @@ export default function Dashboard() {
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 8000) // timeout 8s
-      const res = await fetch(`${API}/cameras/remover/${camera.id}`, {
+      const res = await fetch(`${API}/cameras/remover`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: camera.id }),
         signal: controller.signal,
       })
       clearTimeout(timeout)
