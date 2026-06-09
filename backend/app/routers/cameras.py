@@ -63,9 +63,9 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
 def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     return _fazer_delete(camera_id, db)
 
-@router.post("/{camera_id}/deletar")
-def deletar_camera_post(camera_id: UUID, db: Session = Depends(get_db)):
-    """Rota alternativa via POST para compatibilidade com proxies que bloqueiam DELETE."""
+@router.post("/remover/{camera_id}")
+def remover_camera(camera_id: UUID, db: Session = Depends(get_db)):
+    """Rota POST alternativa para remover câmera."""
     return _fazer_delete(camera_id, db)
 
 def _fazer_delete(camera_id: UUID, db: Session):
