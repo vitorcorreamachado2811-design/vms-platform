@@ -69,16 +69,20 @@ def get_buffer(camera_id: str) -> collections.deque:
 def adicionar_frame_buffer(camera_id: str, frame):
     """Salva frame como JPEG em disco e guarda só o caminho no buffer."""
     buf = get_buffer(camera_id)
-    # Remove arquivo mais antigo se buffer cheio
-    if len(buf) == MAX_BUFFER and buf:
+    # Remove arquivo mais antigo ANTES de adicionar novo
+    if len(buf) == buf.maxlen:
         try:
-            os.remove(buf[0])
+            old_path = buf[0]
+            os.remove(old_path)
         except:
             pass
     # Salva frame como JPEG temporário
     path = f"/tmp/buf_{camera_id}_{int(time.time()*1000)}.jpg"
-    cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-    buf.append(path)
+    try:
+        cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        buf.append(path)
+    except Exception as e:
+        print(f"[BUFFER] Erro ao salvar frame: {e}", flush=True)
 
 def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -> str | None:
     """
@@ -86,9 +90,18 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
     gera um .mp4 e faz upload no Supabase Storage bucket 'event-clips'.
     Retorna URL pública ou None em caso de erro.
     """
-    # 1. Copia caminhos dos frames pré-evento do buffer
+    # 1. Copia os arquivos pré-evento para pasta temporária do evento
+    # (evita que o buffer delete os arquivos enquanto usamos)
     buf = get_buffer(camera_id)
-    paths_pre = list(buf)
+    paths_pre = []
+    for i, p in enumerate(list(buf)):
+        try:
+            dst = f"/tmp/pre_{evento_id}_{i}.jpg"
+            import shutil
+            shutil.copy2(p, dst)
+            paths_pre.append(dst)
+        except:
+            pass
 
     # 2. Captura frames pós-evento (10s) salvando em disco
     paths_pos = []
@@ -173,7 +186,7 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
         return None
     finally:
         # Limpa todos os temporários
-        for p in [tmp_avi, tmp_path] + paths_pos:
+        for p in [tmp_avi, tmp_path] + paths_pos + paths_pre:
             try:
                 os.remove(p)
             except:
