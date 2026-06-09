@@ -8,3 +8,4 @@ python-dotenv==1.0.0
 pydantic==2.11.5
 asyncpg==0.30.0
 alembic==1.15.2
+supabase
