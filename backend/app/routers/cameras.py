@@ -22,38 +22,80 @@ _snapshot_cache: dict = {}
 _cache_lock = threading.Lock()
 
 def _worker_snapshot(camera_id: str, rtsp_url: str):
-    """Thread que atualiza o snapshot em background a cada 2s."""
+    """
+    Mantém conexão RTSP aberta e extrai frames continuamente via pipe.
+    Muito mais rápido que abrir/fechar conexão a cada snapshot.
+    """
     print(f"[SNAPSHOT] Worker iniciado para câmera {camera_id}", flush=True)
+
+    SOI = b"\xff\xd8"
+    EOI = b"\xff\xd9"
+
     while True:
         with _cache_lock:
-            info = _snapshot_cache.get(camera_id, {})
-            if not info.get("rodando"):
+            if not _snapshot_cache.get(camera_id, {}).get("rodando"):
                 break
 
+        proc = None
         try:
-            resultado = subprocess.run([
-                "ffmpeg", "-y",
+            proc = subprocess.Popen([
+                "ffmpeg",
                 "-rtsp_transport", "tcp",
                 "-i", rtsp_url,
-                "-frames:v", "1",
-                "-q:v", "4",
-                "-f", "image2",
+                "-vf", "fps=1",
+                "-q:v", "6",
+                "-f", "image2pipe",
                 "-vcodec", "mjpeg",
                 "pipe:1"
-            ], timeout=8, capture_output=True)
+            ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-            if resultado.returncode == 0 and len(resultado.stdout) > 0:
+            print(f"[SNAPSHOT] Conexão RTSP aberta para {camera_id}", flush=True)
+
+            buffer = b""
+            while True:
                 with _cache_lock:
-                    if camera_id in _snapshot_cache:
-                        _snapshot_cache[camera_id]["data"] = resultado.stdout
-                        _snapshot_cache[camera_id]["ts"]   = time.time()
+                    if not _snapshot_cache.get(camera_id, {}).get("rodando"):
+                        proc.terminate()
+                        return
+
+                chunk = proc.stdout.read(8192)
+                if not chunk:
+                    break
+
+                buffer += chunk
+
+                while True:
+                    start = buffer.find(SOI)
+                    if start == -1:
+                        buffer = b""
+                        break
+                    end = buffer.find(EOI, start)
+                    if end == -1:
+                        buffer = buffer[start:]
+                        break
+                    frame = buffer[start:end + 2]
+                    buffer = buffer[end + 2:]
+                    if len(frame) > 1000:
+                        with _cache_lock:
+                            if camera_id in _snapshot_cache:
+                                _snapshot_cache[camera_id]["data"] = frame
+                                _snapshot_cache[camera_id]["ts"]   = time.time()
+
+            print(f"[SNAPSHOT] Conexão encerrada para {camera_id}, reconectando...", flush=True)
 
         except Exception as e:
             print(f"[SNAPSHOT] Erro câmera {camera_id}: {e}", flush=True)
+        finally:
+            if proc:
+                try:
+                    proc.terminate()
+                except:
+                    pass
 
-        time.sleep(2)  # atualiza a cada 2s
+        time.sleep(3)
 
     print(f"[SNAPSHOT] Worker encerrado para câmera {camera_id}", flush=True)
+
 
 def iniciar_cache_snapshot(camera_id: str, rtsp_url: str):
     """Inicia o worker de cache para uma câmera."""
