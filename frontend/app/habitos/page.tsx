@@ -223,7 +223,7 @@ function GraficoHistorico({ registros, perfil }: {
         <XAxis dataKey="data" tick={{ fill: '#9ca3af', fontSize: 11 }} />
         <YAxis domain={['auto', 'auto']} tickFormatter={decimalParaHora} tick={{ fill: '#9ca3af', fontSize: 11 }} />
         <Tooltip
-          formatter={(v: number | string) => [decimalParaHora(Number(v)), 'Horário']}
+          formatter={(v) => [decimalParaHora(Number(v ?? 0)), 'Horário']}
           contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
           labelStyle={{ color: '#9ca3af' }}
         />
