@@ -57,6 +57,14 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
 
 @router.delete("/{camera_id}")
 def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
+    return _fazer_delete(camera_id, db)
+
+@router.post("/{camera_id}/deletar")
+def deletar_camera_post(camera_id: UUID, db: Session = Depends(get_db)):
+    """Rota alternativa via POST para compatibilidade com proxies que bloqueiam DELETE."""
+    return _fazer_delete(camera_id, db)
+
+def _fazer_delete(camera_id: UUID, db: Session):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
