@@ -71,6 +71,12 @@ export default function Dashboard() {
   const [nomeCamera, setNomeCamera] = useState('')
   const [rtspUrl, setRtspUrl] = useState('')
   const [empresaId, setEmpresaId] = useState('')
+  const [marca, setMarca] = useState('')
+  const [camIp, setCamIp] = useState('')
+  const [camPorta, setCamPorta] = useState('')
+  const [camUsuario, setCamUsuario] = useState('admin')
+  const [camSenha, setCamSenha] = useState('')
+  const [camCanal, setCamCanal] = useState('1')
   const [nomeEmpresa, setNomeEmpresa] = useState('')
   const [emailEmpresa, setEmailEmpresa] = useState('')
   const [aba, setAba] = useState('cameras')
@@ -95,6 +101,48 @@ export default function Dashboard() {
       setCameras([])
       setEmpresas([])
     }
+  }
+
+  const MARCAS: Record<string, { label: string; template: (u:string,s:string,ip:string,porta:string,canal:string) => string; portaPadrao: string }> = {
+    intelbras: {
+      label: 'Intelbras',
+      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
+      portaPadrao: '554',
+    },
+    hikvision: {
+      label: 'Hikvision',
+      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/Streaming/Channels/${c}01`,
+      portaPadrao: '554',
+    },
+    dahua: {
+      label: 'Dahua',
+      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
+      portaPadrao: '554',
+    },
+    axis: {
+      label: 'Axis',
+      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/axis-media/media.amp?camera=${c}`,
+      portaPadrao: '554',
+    },
+    generico: {
+      label: 'Genérico (URL livre)',
+      template: () => '',
+      portaPadrao: '554',
+    },
+  }
+
+  function gerarUrl() {
+    if (!marca || marca === 'generico') return
+    const m = MARCAS[marca]
+    if (m && camIp) {
+      setRtspUrl(m.template(camUsuario, camSenha, camIp, camPorta || m.portaPadrao, camCanal))
+    }
+  }
+
+  function onMarcaChange(m: string) {
+    setMarca(m)
+    setCamPorta(MARCAS[m]?.portaPadrao || '554')
+    setRtspUrl('')
   }
 
   async function criarCamera() {
@@ -269,12 +317,77 @@ export default function Dashboard() {
                   value={nomeCamera}
                   onChange={e => setNomeCamera(e.target.value)}
                 />
-                <input
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-                  placeholder="URL RTSP"
-                  value={rtspUrl}
-                  onChange={e => setRtspUrl(e.target.value)}
-                />
+
+                {/* Seletor de marca */}
+                <select
+                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
+                  value={marca}
+                  onChange={e => onMarcaChange(e.target.value)}
+                >
+                  <option value="">Selecione a marca</option>
+                  {Object.entries(MARCAS).map(([k, v]) => (
+                    <option key={k} value={k}>{v.label}</option>
+                  ))}
+                </select>
+
+                {/* Campos específicos por marca */}
+                {marca && marca !== 'generico' && (
+                  <div className="bg-gray-900 rounded-lg p-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                        placeholder="IP (ex: 192.168.1.100)"
+                        value={camIp}
+                        onChange={e => { setCamIp(e.target.value); setTimeout(gerarUrl, 0) }}
+                        onBlur={gerarUrl}
+                      />
+                      <input
+                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                        placeholder="Porta"
+                        value={camPorta}
+                        onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }}
+                        onBlur={gerarUrl}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                        placeholder="Usuário"
+                        value={camUsuario}
+                        onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }}
+                        onBlur={gerarUrl}
+                      />
+                      <input
+                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                        placeholder="Senha"
+                        type="password"
+                        value={camSenha}
+                        onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }}
+                        onBlur={gerarUrl}
+                      />
+                    </div>
+                    <input
+                      className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm w-full"
+                      placeholder="Canal (ex: 1)"
+                      value={camCanal}
+                      onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }}
+                      onBlur={gerarUrl}
+                    />
+                  </div>
+                )}
+
+                {/* URL gerada ou livre */}
+                <div>
+                  <input
+                    className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
+                    placeholder="URL RTSP (gerada automaticamente ou cole aqui)"
+                    value={rtspUrl}
+                    onChange={e => setRtspUrl(e.target.value)}
+                  />
+                  {rtspUrl && (
+                    <p className="text-green-400 text-xs mt-1 px-1">✓ URL pronta</p>
+                  )}
+                </div>
                 <select
                   className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
                   value={empresaId}
