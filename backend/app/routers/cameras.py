@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -169,28 +169,29 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     return camera
 
 @router.delete("/{camera_id}")
-def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
+def deletar_camera(camera_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
+
+    cid = str(camera_id)
 
     # Deleta do banco imediatamente
     db.delete(camera)
     db.commit()
 
-    # Para processos em background (não bloqueia a resposta)
-    def _parar():
+    # Para processos depois de responder
+    def _parar_tudo():
         try:
-            parar_stream(str(camera_id))
+            parar_stream(cid)
         except:
             pass
         try:
-            parar_cache_snapshot(str(camera_id))
+            parar_cache_snapshot(cid)
         except:
             pass
 
-    threading.Thread(target=_parar, daemon=True).start()
-
+    background_tasks.add_task(_parar_tudo)
     return {"mensagem": "Câmera removida"}
 
 # ── SNAPSHOT ──────────────────────────────────────────────────────────────────
