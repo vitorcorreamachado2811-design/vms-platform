@@ -173,10 +173,24 @@ def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
-    parar_stream(str(camera_id))
-    parar_cache_snapshot(str(camera_id))
+
+    # Deleta do banco imediatamente
     db.delete(camera)
     db.commit()
+
+    # Para processos em background (não bloqueia a resposta)
+    def _parar():
+        try:
+            parar_stream(str(camera_id))
+        except:
+            pass
+        try:
+            parar_cache_snapshot(str(camera_id))
+        except:
+            pass
+
+    threading.Thread(target=_parar, daemon=True).start()
+
     return {"mensagem": "Câmera removida"}
 
 # ── SNAPSHOT ──────────────────────────────────────────────────────────────────
