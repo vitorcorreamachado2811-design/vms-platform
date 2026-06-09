@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from uuid import UUID
@@ -14,8 +14,71 @@ from app.models.models import Camera
 
 router = APIRouter()
 
-# Dicionário global que guarda os processos FFmpeg ativos
-# Chave: camera_id (str), Valor: subprocess.Popen
+# ─────────────────────────────────────────────
+# CACHE DE SNAPSHOTS (atualiza em background)
+# ─────────────────────────────────────────────
+# {camera_id: {"data": bytes, "ts": float, "rodando": bool}}
+_snapshot_cache: dict = {}
+_cache_lock = threading.Lock()
+
+def _worker_snapshot(camera_id: str, rtsp_url: str):
+    """Thread que atualiza o snapshot em background a cada 2s."""
+    print(f"[SNAPSHOT] Worker iniciado para câmera {camera_id}", flush=True)
+    while True:
+        with _cache_lock:
+            info = _snapshot_cache.get(camera_id, {})
+            if not info.get("rodando"):
+                break
+
+        try:
+            resultado = subprocess.run([
+                "ffmpeg", "-y",
+                "-rtsp_transport", "tcp",
+                "-i", rtsp_url,
+                "-frames:v", "1",
+                "-q:v", "4",
+                "-f", "image2",
+                "-vcodec", "mjpeg",
+                "pipe:1"
+            ], timeout=8, capture_output=True)
+
+            if resultado.returncode == 0 and len(resultado.stdout) > 0:
+                with _cache_lock:
+                    if camera_id in _snapshot_cache:
+                        _snapshot_cache[camera_id]["data"] = resultado.stdout
+                        _snapshot_cache[camera_id]["ts"]   = time.time()
+
+        except Exception as e:
+            print(f"[SNAPSHOT] Erro câmera {camera_id}: {e}", flush=True)
+
+        time.sleep(2)  # atualiza a cada 2s
+
+    print(f"[SNAPSHOT] Worker encerrado para câmera {camera_id}", flush=True)
+
+def iniciar_cache_snapshot(camera_id: str, rtsp_url: str):
+    """Inicia o worker de cache para uma câmera."""
+    with _cache_lock:
+        info = _snapshot_cache.get(camera_id, {})
+        if info.get("rodando"):
+            return  # já está rodando
+        _snapshot_cache[camera_id] = {"data": None, "ts": 0, "rodando": True}
+
+    t = threading.Thread(
+        target=_worker_snapshot,
+        args=(camera_id, rtsp_url),
+        daemon=True
+    )
+    t.start()
+
+def parar_cache_snapshot(camera_id: str):
+    """Para o worker de cache de uma câmera."""
+    with _cache_lock:
+        if camera_id in _snapshot_cache:
+            _snapshot_cache[camera_id]["rodando"] = False
+
+# ─────────────────────────────────────────────
+# HLS STREAMS
+# ─────────────────────────────────────────────
 processos_ffmpeg: dict[str, subprocess.Popen] = {}
 
 class CameraCreate(BaseModel):
@@ -35,7 +98,12 @@ class CameraResponse(BaseModel):
 
 @router.get("/", response_model=list[CameraResponse])
 def listar_cameras(db: Session = Depends(get_db)):
-    return db.query(Camera).all()
+    cameras = db.query(Camera).all()
+    # Inicia cache de snapshot para todas câmeras ativas
+    for c in cameras:
+        if c.ativo:
+            iniciar_cache_snapshot(str(c.id), c.rtsp_url)
+    return cameras
 
 @router.post("/", response_model=CameraResponse)
 def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
@@ -48,6 +116,7 @@ def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     db.add(nova)
     db.commit()
     db.refresh(nova)
+    iniciar_cache_snapshot(str(nova.id), nova.rtsp_url)
     return nova
 
 @router.get("/{camera_id}", response_model=CameraResponse)
@@ -62,8 +131,8 @@ def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
-    # Para o FFmpeg se estiver rodando
     parar_stream(str(camera_id))
+    parar_cache_snapshot(str(camera_id))
     db.delete(camera)
     db.commit()
     return {"mensagem": "Câmera removida"}
@@ -73,47 +142,65 @@ def deletar_camera(camera_id: UUID, db: Session = Depends(get_db)):
 @router.get("/{camera_id}/snapshot")
 def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
     """
-    Captura um frame JPG da câmera via FFmpeg.
-    Útil para thumbnail e verificação de conexão.
+    Retorna o último frame em cache (resposta imediata).
+    Se não houver cache ainda, captura um frame na hora.
     """
+    cid = str(camera_id)
+
+    # Verifica cache primeiro
+    with _cache_lock:
+        info = _snapshot_cache.get(cid, {})
+        dados = info.get("data")
+
+    if dados:
+        return Response(
+            content=dados,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-cache", "X-From-Cache": "true"}
+        )
+
+    # Cache ainda não tem frame — captura na hora e inicia worker
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
 
-    caminho = f"/tmp/snapshot_{camera_id}.jpg"
+    iniciar_cache_snapshot(cid, camera.rtsp_url)
 
     try:
-        # FFmpeg captura 1 frame e sai — timeout 10s
         resultado = subprocess.run([
             "ffmpeg", "-y",
-            "-rtsp_transport", "tcp",          # TCP é mais estável que UDP
+            "-rtsp_transport", "tcp",
             "-i", camera.rtsp_url,
-            "-frames:v", "1",                   # Só 1 frame
-            "-q:v", "2",                        # Qualidade alta (1-31, menor = melhor)
-            caminho
+            "-frames:v", "1",
+            "-q:v", "4",
+            "-f", "image2",
+            "-vcodec", "mjpeg",
+            "pipe:1"
         ], timeout=10, capture_output=True)
 
-        if not os.path.exists(caminho):
-            raise HTTPException(status_code=502, detail="Câmera não respondeu")
+        if resultado.returncode == 0 and len(resultado.stdout) > 0:
+            with _cache_lock:
+                if cid in _snapshot_cache:
+                    _snapshot_cache[cid]["data"] = resultado.stdout
+                    _snapshot_cache[cid]["ts"]   = time.time()
+            return Response(
+                content=resultado.stdout,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "no-cache"}
+            )
 
-        return FileResponse(
-            caminho,
-            media_type="image/jpeg",
-            headers={"Cache-Control": "no-cache"}  # Sempre busca frame novo
-        )
+        raise HTTPException(status_code=502, detail="Câmera não respondeu")
 
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Timeout ao conectar na câmera")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # ── HLS STREAM ────────────────────────────────────────────────────────────────
 
 def iniciar_ffmpeg(camera_id: str, rtsp_url: str):
-    """
-    Inicia o FFmpeg em background convertendo RTSP → HLS.
-    Cria segmentos de 2s em /tmp/hls_{camera_id}/
-    """
     pasta = f"/tmp/hls_{camera_id}"
     os.makedirs(pasta, exist_ok=True)
 
@@ -121,45 +208,38 @@ def iniciar_ffmpeg(camera_id: str, rtsp_url: str):
         "ffmpeg", "-y",
         "-rtsp_transport", "tcp",
         "-i", rtsp_url,
-        "-c:v", "libx264",          # Codec H264 — compatível com todos os browsers
-        "-preset", "ultrafast",      # Prioriza velocidade sobre compressão
-        "-tune", "zerolatency",      # Minimiza buffer interno do FFmpeg
-        "-c:a", "aac",              # Áudio AAC
-        "-f", "hls",                # Formato de saída HLS
-        "-hls_time", "2",           # Cada segmento dura 2 segundos
-        "-hls_list_size", "5",      # Mantém só os 5 últimos segmentos (10s de buffer)
-        "-hls_flags", "delete_segments",  # Apaga segmentos antigos automaticamente
-        f"{pasta}/stream.m3u8"      # Arquivo playlist HLS
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-c:a", "aac",
+        "-f", "hls",
+        "-hls_time", "2",
+        "-hls_list_size", "5",
+        "-hls_flags", "delete_segments",
+        f"{pasta}/stream.m3u8"
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     processos_ffmpeg[camera_id] = processo
     return processo
 
 def parar_stream(camera_id: str):
-    """Para o processo FFmpeg de uma câmera específica."""
     if camera_id in processos_ffmpeg:
         processos_ffmpeg[camera_id].terminate()
         del processos_ffmpeg[camera_id]
 
 @router.post("/{camera_id}/stream/iniciar")
 def iniciar_stream(camera_id: UUID, db: Session = Depends(get_db)):
-    """
-    Inicia o processo FFmpeg para a câmera.
-    Chame este endpoint antes de abrir o player HLS.
-    """
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
 
     cid = str(camera_id)
 
-    # Se já tem processo rodando, não inicia outro
     if cid in processos_ffmpeg and processos_ffmpeg[cid].poll() is None:
         return {"status": "já rodando", "playlist": f"/cameras/{cid}/stream/playlist"}
 
     iniciar_ffmpeg(cid, camera.rtsp_url)
 
-    # Aguarda até 8s para o primeiro segmento aparecer
     pasta = f"/tmp/hls_{cid}"
     for _ in range(16):
         if os.path.exists(f"{pasta}/stream.m3u8"):
@@ -169,46 +249,32 @@ def iniciar_stream(camera_id: UUID, db: Session = Depends(get_db)):
         parar_stream(cid)
         raise HTTPException(status_code=502, detail="FFmpeg não conseguiu conectar na câmera")
 
-    return {
-        "status": "iniciado",
-        "playlist": f"/cameras/{cid}/stream/playlist"
-    }
+    return {"status": "iniciado", "playlist": f"/cameras/{cid}/stream/playlist"}
 
 @router.get("/{camera_id}/stream/playlist")
 def servir_playlist(camera_id: UUID):
-    """Serve o arquivo .m3u8 para o player HLS."""
     cid = str(camera_id)
     caminho = f"/tmp/hls_{cid}/stream.m3u8"
-
     if not os.path.exists(caminho):
         raise HTTPException(status_code=404, detail="Stream não iniciado")
-
-    return FileResponse(
-        caminho,
-        media_type="application/vnd.apple.mpegurl",
-        headers={"Cache-Control": "no-cache"}
-    )
+    return FileResponse(caminho, media_type="application/vnd.apple.mpegurl",
+                        headers={"Cache-Control": "no-cache"})
 
 @router.get("/{camera_id}/stream/{segmento}")
 def servir_segmento(camera_id: UUID, segmento: str):
-    """Serve os segmentos .ts do stream HLS."""
     cid = str(camera_id)
     caminho = f"/tmp/hls_{cid}/{segmento}"
-
     if not os.path.exists(caminho):
         raise HTTPException(status_code=404, detail="Segmento não encontrado")
-
     return FileResponse(caminho, media_type="video/mp2t")
 
 @router.post("/{camera_id}/stream/parar")
 def parar_stream_endpoint(camera_id: UUID):
-    """Para o processo FFmpeg da câmera."""
     parar_stream(str(camera_id))
     return {"status": "parado"}
 
 @router.get("/streams/status")
 def status_streams():
-    """Retorna quais câmeras estão com stream ativo."""
     return {
         cid: processos_ffmpeg[cid].poll() is None
         for cid in processos_ffmpeg
