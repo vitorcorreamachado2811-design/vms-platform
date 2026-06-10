@@ -46,7 +46,8 @@ COZINHA_DURACAO_MIN  = 10
 # ─────────────────────────────────────────────
 PRE_EVENTO_SEG  = 10
 POS_EVENTO_SEG  = 10
-MAX_BUFFER      = 5   # máximo 5 frames pré-evento (1 frame/2s = 10s)
+FPS_BUFFER      = 15                          # frames por segundo no buffer
+MAX_BUFFER      = PRE_EVENTO_SEG * FPS_BUFFER # 150 frames pré-evento
 
 # Buffer circular por câmera: guarda caminhos de arquivos JPEG (não numpy)
 # {camera_id: deque de caminhos}
@@ -103,17 +104,23 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
         except:
             pass
 
-    # 2. Captura frames pós-evento (10s) salvando em disco
+    # 2. Coleta frames pos-evento do buffer (thread captura a 15fps)
     paths_pos = []
     deadline = time.time() + POS_EVENTO_SEG
+    vistos = set()
     while time.time() < deadline:
-        data = capturar_frame(rtsp_url)
-        if data is not None:
-            path = f"/tmp/pos_{evento_id}_{len(paths_pos)}.jpg"
-            with open(path, "wb") as f:
-                f.write(data)
-            paths_pos.append(path)
-        time.sleep(2.0)
+        buf = get_buffer(camera_id)
+        for p in list(buf):
+            if p not in vistos and os.path.exists(p):
+                vistos.add(p)
+                dst = f"/tmp/pos_{evento_id}_{len(paths_pos)}.jpg"
+                try:
+                    import shutil
+                    shutil.copy2(p, dst)
+                    paths_pos.append(dst)
+                except:
+                    pass
+        time.sleep(0.1)
 
     todos_paths = paths_pre + paths_pos
     n_frames = len(todos_paths)
@@ -137,9 +144,9 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
             return None
         h, w = primeiro.shape[:2]
 
-        # Grava AVI com MJPG — 1 frame/s
+        # Grava AVI com MJPG a FPS_BUFFER
         fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-        out = cv2.VideoWriter(tmp_avi, fourcc, 1, (w, h))
+        out = cv2.VideoWriter(tmp_avi, fourcc, FPS_BUFFER, (w, h))
         for p in todos_paths:
             try:
                 f = cv2.imdecode(np.frombuffer(open(p,'rb').read(), dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -429,7 +436,6 @@ def thread_verificacao_habitos():
 # WORKER ORIGINAL
 # ─────────────────────────────────────────────
 def capturar_frame(rtsp_url):
-    import subprocess
     cmd = [
         "ffmpeg", "-rtsp_transport", "tcp",
         "-i", rtsp_url,
@@ -445,6 +451,80 @@ def capturar_frame(rtsp_url):
     except Exception as e:
         print(f"Erro ffmpeg: {e}", flush=True)
     return None
+
+# Thread de captura continua por camera
+_captura_status: dict = {}
+
+def _thread_captura_continua(camera_id: str, rtsp_url: str):
+    SOI = b"\xff\xd8"
+    EOI = b"\xff\xd9"
+    print(f"[CAPTURA] Thread iniciada para {camera_id}", flush=True)
+
+    while _captura_status.get(camera_id, {}).get("rodando"):
+        proc = None
+        try:
+            proc = subprocess.Popen([
+                "ffmpeg",
+                "-rtsp_transport", "tcp",
+                "-i", rtsp_url,
+                "-vf", f"fps={FPS_BUFFER}",
+                "-q:v", "8",
+                "-f", "image2pipe",
+                "-vcodec", "mjpeg",
+                "pipe:1"
+            ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+            print(f"[CAPTURA] Conexao RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
+            buffer = b""
+
+            while _captura_status.get(camera_id, {}).get("rodando"):
+                chunk = proc.stdout.read(16384)
+                if not chunk:
+                    break
+                buffer += chunk
+
+                while True:
+                    start = buffer.find(SOI)
+                    if start == -1:
+                        buffer = b""
+                        break
+                    end = buffer.find(EOI, start)
+                    if end == -1:
+                        buffer = buffer[start:]
+                        break
+                    frame_data = buffer[start:end + 2]
+                    buffer = buffer[end + 2:]
+                    if len(frame_data) > 1000:
+                        arr = np.frombuffer(frame_data, dtype=np.uint8)
+                        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            adicionar_frame_buffer(camera_id, frame)
+
+        except Exception as e:
+            print(f"[CAPTURA] Erro {camera_id}: {e}", flush=True)
+        finally:
+            if proc:
+                try:
+                    proc.terminate()
+                except:
+                    pass
+
+        if _captura_status.get(camera_id, {}).get("rodando"):
+            time.sleep(3)
+
+    print(f"[CAPTURA] Thread encerrada para {camera_id}", flush=True)
+
+def iniciar_captura_continua(camera_id: str, rtsp_url: str):
+    if _captura_status.get(camera_id, {}).get("rodando"):
+        return
+    _captura_status[camera_id] = {"rodando": True}
+    t = threading.Thread(
+        target=_thread_captura_continua,
+        args=(camera_id, rtsp_url),
+        daemon=True
+    )
+    t.start()
+
 
 def pessoa_horizontal(box, keypoints):
     x1, y1, x2, y2 = box
@@ -562,6 +642,9 @@ def processar_camera(camera):
 
     print(f"[{nome}] Iniciando monitoramento...", flush=True)
 
+    # Inicia captura continua a 15fps para o buffer de clipes
+    iniciar_captura_continua(camera_id, rtsp_url)
+
     tracks   = {}
     next_id  = 0
     linha    = None
@@ -610,8 +693,7 @@ def processar_camera(camera):
                 time.sleep(5)
                 continue
 
-            # ── ALIMENTA O BUFFER DE CLIPE ──────────────────
-            adicionar_frame_buffer(camera_id, frame)
+            # buffer alimentado pela thread de captura continua
 
             h, w = frame.shape[:2]
             results = model_pose(frame, verbose=False)
