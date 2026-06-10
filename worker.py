@@ -1,4 +1,4 @@
-import requests
+﻿import requests
 import threading
 import time
 import numpy as np
@@ -32,43 +32,43 @@ TORNOZELO_DIR = 16
 PULSO_ESQ   = 9
 PULSO_DIR   = 10
 
-# ─────────────────────────────────────────────
-# CONFIGURAÇÕES DE HÁBITOS
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# CONFIGURAÃ‡Ã•ES DE HÃBITOS
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 MIN_AMOSTRAS         = 3
 THRESHOLD_MULTIPLIER = 1.5
 TOLERANCIA_MINIMA_MIN = 15
 BANHO_DURACAO_MIN    = 5
 COZINHA_DURACAO_MIN  = 10
 
-# ─────────────────────────────────────────────
-# CONFIGURAÇÕES DE CLIPE DE VÍDEO
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# CONFIGURAÃ‡Ã•ES DE CLIPE DE VÃDEO
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 PRE_EVENTO_SEG  = 10
 POS_EVENTO_SEG  = 10
 FPS_BUFFER      = 15                          # frames por segundo no buffer
-MAX_BUFFER      = PRE_EVENTO_SEG * FPS_BUFFER # 150 frames pré-evento
+MAX_BUFFER      = PRE_EVENTO_SEG * FPS_BUFFER # 150 frames prÃ©-evento
 
-# Buffer circular por câmera: guarda caminhos de arquivos JPEG (não numpy)
+# Buffer circular por cÃ¢mera: guarda caminhos de arquivos JPEG (nÃ£o numpy)
 # {camera_id: deque de caminhos}
 _buffers: dict = {}
 
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # SUPABASE CLIENT
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def get_supabase():
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# ─────────────────────────────────────────────
-# FUNÇÕES DE BUFFER E CLIPE
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# FUNÃ‡Ã•ES DE BUFFER E CLIPE
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def get_buffer(camera_id: str) -> collections.deque:
     if camera_id not in _buffers:
         _buffers[camera_id] = collections.deque(maxlen=MAX_BUFFER)
     return _buffers[camera_id]
 
 def adicionar_frame_buffer(camera_id: str, frame):
-    """Salva frame como JPEG em disco e guarda só o caminho no buffer."""
+    """Salva frame como JPEG em disco e guarda sÃ³ o caminho no buffer."""
     buf = get_buffer(camera_id)
     # Remove arquivo mais antigo ANTES de adicionar novo
     if len(buf) == buf.maxlen:
@@ -77,7 +77,7 @@ def adicionar_frame_buffer(camera_id: str, frame):
             os.remove(old_path)
         except:
             pass
-    # Salva frame como JPEG temporário
+    # Salva frame como JPEG temporÃ¡rio
     path = f"/tmp/buf_{camera_id}_{int(time.time()*1000)}.jpg"
     try:
         cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
@@ -87,11 +87,11 @@ def adicionar_frame_buffer(camera_id: str, frame):
 
 def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -> str | None:
     """
-    Combina frames pré-evento (buffer) + captura pós-evento ao vivo,
+    Combina frames prÃ©-evento (buffer) + captura pÃ³s-evento ao vivo,
     gera um .mp4 e faz upload no Supabase Storage bucket 'event-clips'.
-    Retorna URL pública ou None em caso de erro.
+    Retorna URL pÃºblica ou None em caso de erro.
     """
-    # 1. Copia os arquivos pré-evento para pasta temporária do evento
+    # 1. Copia os arquivos prÃ©-evento para pasta temporÃ¡ria do evento
     # (evita que o buffer delete os arquivos enquanto usamos)
     buf = get_buffer(camera_id)
     paths_pre = []
@@ -124,7 +124,7 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
 
     todos_paths = paths_pre + paths_pos
     n_frames = len(todos_paths)
-    print(f"[CLIPE] {n_frames} frames ({len(paths_pre)} pré + {len(paths_pos)} pós)", flush=True)
+    print(f"[CLIPE] {n_frames} frames ({len(paths_pre)} prÃ© + {len(paths_pos)} pÃ³s)", flush=True)
 
     if not todos_paths:
         print(f"[CLIPE] Sem frames para evento {evento_id}", flush=True)
@@ -138,7 +138,7 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
     try:
         import subprocess
 
-        # Lê primeiro frame para obter dimensões
+        # LÃª primeiro frame para obter dimensÃµes
         primeiro = cv2.imdecode(np.frombuffer(open(todos_paths[0],'rb').read(), dtype=np.uint8), cv2.IMREAD_COLOR)
         if primeiro is None:
             return None
@@ -185,23 +185,23 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
         )
 
         url = supabase.storage.from_("event-clips").get_public_url(storage_path)
-        print(f"[CLIPE] ✅ Upload OK → {url}", flush=True)
+        print(f"[CLIPE] âœ… Upload OK â†’ {url}", flush=True)
         return url
 
     except Exception as e:
         print(f"[CLIPE] Erro upload: {e}", flush=True)
         return None
     finally:
-        # Limpa todos os temporários
+        # Limpa todos os temporÃ¡rios
         for p in [tmp_avi, tmp_path] + paths_pos + paths_pre:
             try:
                 os.remove(p)
             except:
                 pass
 
-# ─────────────────────────────────────────────
-# MÓDULO DE HÁBITOS
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# MÃ“DULO DE HÃBITOS
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _decimal_para_hora(decimal: float) -> str:
     h = int(decimal)
     m = int((decimal - h) * 60)
@@ -252,8 +252,8 @@ def _atualizar_perfil_e_alertar(camera_id, empresa_id, tipo, hora_atual, horario
         }, on_conflict="camera_id,pessoa_id,tipo").execute()
 
         print(
-            f"[HABITOS] {tipo} | média={_decimal_para_hora(media)} "
-            f"desvio=±{desvio*60:.0f}min threshold={_decimal_para_hora(threshold)} "
+            f"[HABITOS] {tipo} | mÃ©dia={_decimal_para_hora(media)} "
+            f"desvio=Â±{desvio*60:.0f}min threshold={_decimal_para_hora(threshold)} "
             f"amostras={n}",
             flush=True
         )
@@ -283,7 +283,7 @@ def _atualizar_perfil_e_alertar(camera_id, empresa_id, tipo, hora_atual, horario
         }).execute()
 
         print(
-            f"[HABITOS] ⚠️ ALERTA {tipo} | esperado até {_decimal_para_hora(threshold)} "
+            f"[HABITOS] âš ï¸ ALERTA {tipo} | esperado atÃ© {_decimal_para_hora(threshold)} "
             f"| ocorreu {_decimal_para_hora(hora_atual)} | atraso {desvio_minutos}min",
             flush=True
         )
@@ -314,7 +314,7 @@ def registrar_habito_sono(camera_id, empresa_id, horario):
             "metadata": {"hora_decimal": hora_decimal}
         }).execute()
 
-        print(f"[HABITOS] 🌙 Sono registrado: {horario.strftime('%H:%M')}", flush=True)
+        print(f"[HABITOS] ðŸŒ™ Sono registrado: {horario.strftime('%H:%M')}", flush=True)
         _atualizar_perfil_e_alertar(camera_id, empresa_id, "sono", hora_decimal, horario)
 
     except Exception as e:
@@ -344,7 +344,7 @@ def registrar_habito_banho(camera_id, empresa_id, horario_inicio, duracao_minuto
             "metadata": {"hora_decimal": hora_decimal}
         }).execute()
 
-        print(f"[HABITOS] 🚿 Banho registrado: {horario_inicio.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
+        print(f"[HABITOS] ðŸš¿ Banho registrado: {horario_inicio.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
         _atualizar_perfil_e_alertar(camera_id, empresa_id, "banho", hora_decimal, horario_inicio)
 
     except Exception as e:
@@ -364,11 +364,11 @@ def registrar_habito_refeicao(camera_id, empresa_id, horario, duracao_minutos):
             "metadata": {"hora_decimal": hora_decimal}
         }).execute()
 
-        print(f"[HABITOS] 🍽️ Refeição registrada: {horario.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
+        print(f"[HABITOS] ðŸ½ï¸ RefeiÃ§Ã£o registrada: {horario.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
         _atualizar_perfil_e_alertar(camera_id, empresa_id, "refeicao", hora_decimal, horario)
 
     except Exception as e:
-        print(f"[HABITOS] Erro refeição: {e}", flush=True)
+        print(f"[HABITOS] Erro refeiÃ§Ã£o: {e}", flush=True)
 
 def verificar_habitos_ausentes():
     try:
@@ -418,8 +418,8 @@ def verificar_habitos_ausentes():
             }).execute()
 
             print(
-                f"[HABITOS] ⚠️ AUSÊNCIA {tipo} não ocorreu | "
-                f"câmera {camera_id} | atraso {desvio_minutos}min",
+                f"[HABITOS] âš ï¸ AUSÃŠNCIA {tipo} nÃ£o ocorreu | "
+                f"cÃ¢mera {camera_id} | atraso {desvio_minutos}min",
                 flush=True
             )
 
@@ -427,14 +427,14 @@ def verificar_habitos_ausentes():
         print(f"[HABITOS] Erro verificar_ausentes: {e}", flush=True)
 
 def thread_verificacao_habitos():
-    print("[HABITOS] Thread de verificação iniciada (a cada 5min)", flush=True)
+    print("[HABITOS] Thread de verificaÃ§Ã£o iniciada (a cada 5min)", flush=True)
     while True:
         time.sleep(300)
         verificar_habitos_ausentes()
 
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # WORKER ORIGINAL
-# ─────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def capturar_frame(rtsp_url):
     cmd = [
         "ffmpeg", "-rtsp_transport", "tcp",
@@ -456,6 +456,7 @@ def capturar_frame(rtsp_url):
 _captura_status: dict = {}
 
 def _thread_captura_continua(camera_id: str, rtsp_url: str):
+    import subprocess as sp
     SOI = b"\xff\xd8"
     EOI = b"\xff\xd9"
     print(f"[CAPTURA] Thread iniciada para {camera_id}", flush=True)
@@ -463,7 +464,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
     while _captura_status.get(camera_id, {}).get("rodando"):
         proc = None
         try:
-            proc = subprocess.Popen([
+            proc = sp.Popen([
                 "ffmpeg",
                 "-rtsp_transport", "tcp",
                 "-i", rtsp_url,
@@ -555,7 +556,7 @@ def lado_da_linha(px, py, x1, y1, x2, y2):
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
 def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
-    """Salva evento no backend e dispara gravação de clipe em thread separada."""
+    """Salva evento no backend e dispara gravaÃ§Ã£o de clipe em thread separada."""
     try:
         resp = requests.post(f"{API_BASE}/eventos/", json={
             "camera_id": camera_id,
@@ -569,9 +570,9 @@ def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
         except:
             pass
 
-        print(f"[{nome}] ⚠️ {tipo} ({confianca:.0%})", flush=True)
+        print(f"[{nome}] âš ï¸ {tipo} ({confianca:.0%})", flush=True)
 
-        # Grava clipe em thread separada para não travar o worker
+        # Grava clipe em thread separada para nÃ£o travar o worker
         if evento_id and rtsp_url:
             def _gravar():
                 url = gravar_e_fazer_upload_clipe(camera_id, rtsp_url, str(evento_id))
@@ -580,7 +581,7 @@ def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
                         requests.patch(f"{API_BASE}/eventos/{evento_id}", json={
                             "video_url": url
                         }, timeout=5)
-                        print(f"[CLIPE] Evento {evento_id} atualizado com vídeo", flush=True)
+                        print(f"[CLIPE] Evento {evento_id} atualizado com vÃ­deo", flush=True)
                     except Exception as e:
                         print(f"[CLIPE] Erro ao atualizar evento: {e}", flush=True)
 
@@ -665,7 +666,7 @@ def processar_camera(camera):
             agora    = time.time()
             agora_dt = datetime.now(timezone.utc)
 
-            # Atualiza configurações a cada 30s
+            # Atualiza configuraÃ§Ãµes a cada 30s
             if agora - config_refresh > 30:
                 linha, regioes = buscar_configuracoes(camera_id)
                 config_refresh = agora
@@ -751,14 +752,14 @@ def processar_camera(camera):
                     def pode_alertar(tipo):
                         return agora - cooldowns[tid][tipo] > COOLDOWN_SEGUNDOS
 
-                    # ── DETECÇÕES ──────────────────────────────────────
+                    # â”€â”€ DETECÃ‡Ã•ES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     # Queda do leito
                     if estava_na_cama and not na_cama and horizontal:
                         if pode_alertar("queda_leito"):
                             salvar_evento(camera_id, "queda_leito", det["conf"], nome, rtsp_url)
                             cooldowns[tid]["queda_leito"] = agora
 
-                    # Queda em pé
+                    # Queda em pÃ©
                     elif not na_cama and horizontal and not estava_na_cama:
                         if pode_alertar("queda_pe"):
                             salvar_evento(camera_id, "queda_pe", det["conf"], nome, rtsp_url)
@@ -782,14 +783,14 @@ def processar_camera(camera):
                             salvar_evento(camera_id, "person", det["conf"], nome, rtsp_url)
                             cooldowns[tid]["person"] = agora
 
-                    # ── HÁBITOS: SONO ───────────────────────────────────
+                    # â”€â”€ HÃBITOS: SONO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if no_quarto and not horizontal and sono_registrado_hoje != hoje_str:
                         hora_agora = agora_dt.hour
                         if 4 <= hora_agora <= 11:
                             sono_registrado_hoje = hoje_str
                             registrar_habito_sono(camera_id, empresa_id, agora_dt)
 
-                    # ── HÁBITOS: BANHO ──────────────────────────────────
+                    # â”€â”€ HÃBITOS: BANHO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if no_banheiro:
                         pr = presenca_regiao[tid]["banheiro"]
                         if not pr:
@@ -807,7 +808,7 @@ def processar_camera(camera):
                     else:
                         presenca_regiao[tid]["banheiro"] = {}
 
-                    # ── HÁBITOS: REFEIÇÃO ───────────────────────────────
+                    # â”€â”€ HÃBITOS: REFEIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if na_cozinha:
                         pr = presenca_regiao[tid]["cozinha"]
                         if not pr:
@@ -834,7 +835,7 @@ def processar_camera(camera):
                         "horizontal": horizontal,
                     }
 
-            # Novos tracks (sem histórico)
+            # Novos tracks (sem histÃ³rico)
             for idx, det in enumerate(deteccoes):
                 if idx not in usados:
                     cx = (det["box"][0] + det["box"][2]) / 2 / w
@@ -865,7 +866,7 @@ def processar_camera(camera):
             time.sleep(10)
 
 def main():
-    print("VMS Worker — Monitoramento de Idosos iniciando...", flush=True)
+    print("VMS Worker â€” Monitoramento de Idosos iniciando...", flush=True)
 
     while True:
         try:
@@ -877,7 +878,7 @@ def main():
             print(f"Erro: {e}. Tentando em 5s...", flush=True)
             time.sleep(5)
 
-    # Thread de verificação proativa de hábitos (a cada 5 min)
+    # Thread de verificaÃ§Ã£o proativa de hÃ¡bitos (a cada 5 min)
     t_habitos = threading.Thread(target=thread_verificacao_habitos, daemon=True)
     t_habitos.start()
 
@@ -898,3 +899,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
