@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Text, Integer
+﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Text, Integer, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -78,3 +78,4 @@ class RegiaoMonitorada(Base):
     y2 = Column(Float, nullable=False)
     tempo_alerta_min = Column(Integer, nullable=True, default=30)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
+
