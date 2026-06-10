@@ -456,7 +456,6 @@ def capturar_frame(rtsp_url):
 _captura_status: dict = {}
 
 def _thread_captura_continua(camera_id: str, rtsp_url: str):
-    import subprocess as sp
     SOI = b"\xff\xd8"
     EOI = b"\xff\xd9"
     print(f"[CAPTURA] Thread iniciada para {camera_id}", flush=True)
@@ -464,7 +463,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
     while _captura_status.get(camera_id, {}).get("rodando"):
         proc = None
         try:
-            proc = sp.Popen([
+            proc = subprocess.Popen([
                 "ffmpeg",
                 "-rtsp_transport", "tcp",
                 "-i", rtsp_url,
