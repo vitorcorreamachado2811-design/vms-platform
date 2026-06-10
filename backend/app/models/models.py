@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Text
+﻿from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -54,6 +54,7 @@ class LinhaContagem(Base):
     y1 = Column(Float, nullable=False)
     x2 = Column(Float, nullable=False)
     y2 = Column(Float, nullable=False)
+    tempo_alerta_min = Column(Integer, nullable=True, default=30)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
     atualizado_em = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
@@ -75,4 +76,5 @@ class RegiaoMonitorada(Base):
     y1 = Column(Float, nullable=False)
     x2 = Column(Float, nullable=False)
     y2 = Column(Float, nullable=False)
+    tempo_alerta_min = Column(Integer, nullable=True, default=30)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
