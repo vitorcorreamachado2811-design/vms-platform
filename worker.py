@@ -436,6 +436,7 @@ def thread_verificacao_habitos():
 # WORKER ORIGINAL
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def capturar_frame(rtsp_url):
+    import subprocess
     cmd = [
         "ffmpeg", "-rtsp_transport", "tcp",
         "-i", rtsp_url,
@@ -899,5 +900,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
