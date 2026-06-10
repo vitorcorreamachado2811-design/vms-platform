@@ -46,7 +46,7 @@ COZINHA_DURACAO_MIN  = 10
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 PRE_EVENTO_SEG  = 10
 POS_EVENTO_SEG  = 10
-FPS_BUFFER      = 15                          # frames por segundo no buffer
+FPS_BUFFER      = 5                          # frames por segundo no buffer
 MAX_BUFFER      = PRE_EVENTO_SEG * FPS_BUFFER # 150 frames prÃ©-evento
 
 # Buffer circular por cÃ¢mera: guarda caminhos de arquivos JPEG (nÃ£o numpy)
@@ -900,6 +900,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
