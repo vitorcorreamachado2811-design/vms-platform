@@ -473,7 +473,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                 "-f", "image2pipe",
                 "-vcodec", "mjpeg",
                 "pipe:1"
-            ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ], stdout=sp.PIPE, stderr=sp.DEVNULL)
 
             print(f"[CAPTURA] Conexao RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
             buffer = b""
@@ -899,4 +899,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
