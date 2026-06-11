@@ -43,11 +43,13 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [desenhando, setDesenhando]   = useState(false)
   const [inicio, setInicio]           = useState<{x: number, y: number} | null>(null)
   const [preview, setPreview]         = useState<{x1:number,y1:number,x2:number,y2:number} | null>(null)
+  const [usandoMjpeg, setUsandoMjpeg] = useState(false)
 
   const intervalRef  = useRef<NodeJS.Timeout | null>(null)
   const aoVivoRef    = useRef(false)
   const imgRef       = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const mjpegUrl     = `${API}/cameras/${camera.id}/stream/mjpeg`
 
   // Carrega regiões existentes
   useEffect(() => {
@@ -79,7 +81,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setAoVivo(true)
     setErro(null)
     setCarregando(true)
-    atualizarSnapshot()
+    setUsandoMjpeg(true)  // tenta MJPEG primeiro
   }
 
   function pararAoVivo() {
@@ -181,21 +183,35 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
       >
-        {/* Snapshot ao vivo */}
-        {snapshot && (
+        {/* Stream MJPEG ao vivo */}
+        {aoVivo && usandoMjpeg ? (
+          <img
+            ref={imgRef}
+            src={mjpegUrl}
+            alt={camera.nome}
+            className="w-full h-full object-cover"
+            onLoad={() => setCarregando(false)}
+            onError={() => {
+              // Fallback para snapshot polling se MJPEG falhar
+              setUsandoMjpeg(false)
+              atualizarSnapshot()
+            }}
+            draggable={false}
+          />
+        ) : snapshot ? (
           <img
             ref={imgRef}
             src={snapshot}
             alt={camera.nome}
             className="w-full h-full object-cover"
-            onLoad={() => { setCarregando(false); proximoFrame() }}
+            onLoad={() => { setCarregando(false); if (aoVivo) proximoFrame() }}
             onError={() => {
               setCarregando(false)
               if (aoVivo) setErro('Sem sinal da câmera')
             }}
             draggable={false}
           />
-        )}
+        ) : null}
 
         {/* Placeholder */}
         {!snapshot && (
