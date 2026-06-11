@@ -36,15 +36,7 @@ interface Analiticos {
   habitos: boolean
 }
 
-const ANALITICOS_DEFAULT: Analiticos = {
-  queda_leito:    true,
-  queda_pe:       true,
-  pessoa:         true,
-  banheiro_tempo: true,
-  gesto_socorro:  true,
-  linha_contagem: true,
-  habitos:        true,
-}
+const ANALITICOS_DEFAULT: Analiticos = { queda_leito: false, queda_pe: false, pessoa: false, banheiro_tempo: false, gesto_socorro: false, linha_contagem: false, habitos: false }
 
 const ANALITICOS_INFO: { key: keyof Analiticos; label: string; icon: string; cor: string }[] = [
   { key: 'queda_leito',    label: 'Queda do Leito',    icon: '🛏️', cor: '#EF4444' },
