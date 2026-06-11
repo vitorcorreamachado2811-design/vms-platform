@@ -8,6 +8,8 @@ import cv2
 import tempfile
 import collections
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+_publish_executor = ThreadPoolExecutor(max_workers=4)
 from collections import defaultdict
 from datetime import datetime, timezone
 from ultralytics import YOLO
@@ -59,7 +61,7 @@ _buffers: dict = {}
 # ─────────────────────────────────────────────
 LIVE_BUCKET       = "live-frames"
 _ultimo_publish: dict = {}   # {camera_id: timestamp}
-PUBLISH_INTERVALO = 0.1      # 10fps = a cada 100ms
+PUBLISH_INTERVALO = 0.05      # 10fps = a cada 100ms
 
 def publish_live_frame(camera_id: str, frame):
     """Faz upload do frame reduzido como JPEG para o Supabase CDN (ao vivo)."""
@@ -528,11 +530,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                             agora_pub = time.time()
                             if agora_pub - _ultimo_publish.get(camera_id, 0) >= PUBLISH_INTERVALO:
                                 _ultimo_publish[camera_id] = agora_pub
-                                threading.Thread(
-                                    target=publish_live_frame,
-                                    args=(camera_id, frame.copy()),
-                                    daemon=True
-                                ).start()
+                                _publish_executor.submit(publish_live_frame, camera_id, frame.copy())
 
         except Exception as e:
             print(f"[CAPTURA] Erro {camera_id}: {e}", flush=True)
@@ -927,3 +925,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
