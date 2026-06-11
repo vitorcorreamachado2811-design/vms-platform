@@ -10,6 +10,7 @@ interface Camera {
   id: string
   nome: string
   rtsp_url: string
+  http_url?: string
   ativo: boolean
 }
 
@@ -67,6 +68,8 @@ function ModalConfirmar({
 export default function Dashboard() {
   const { usuario, carregando: authCarregando, logout } = useAuth()
   const [cameras, setCameras] = useState<Camera[]>([])
+  const [temposBanheiro, setTemposBanheiro] = useState<Record<string, number>>({})
+  const [salvandoTempo, setSalvandoTempo] = useState<string | null>(null)
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [nomeCamera, setNomeCamera] = useState('')
   const [rtspUrl, setRtspUrl] = useState('')
@@ -77,6 +80,8 @@ export default function Dashboard() {
   const [camUsuario, setCamUsuario] = useState('admin')
   const [camSenha, setCamSenha] = useState('')
   const [camCanal, setCamCanal] = useState('1')
+  const [camPortaHttp, setCamPortaHttp] = useState('80')
+  const [httpUrl, setHttpUrl] = useState('')
   const [nomeEmpresa, setNomeEmpresa] = useState('')
   const [emailEmpresa, setEmailEmpresa] = useState('')
   const [aba, setAba] = useState('cameras')
@@ -89,40 +94,85 @@ export default function Dashboard() {
     if (!authCarregando) carregarDados()
   }, [authCarregando])
 
+  async function carregarTemposBanheiro(cameras: Camera[]) {
+    const novos: Record<string, number> = {}
+    await Promise.all(cameras.map(async c => {
+      try {
+        const regioes = await fetch(`${API}/regioes/${c.id}`).then(r => r.json())
+        const banheiro = Array.isArray(regioes) ? regioes.find((r: any) => r.tipo === 'banheiro') : null
+        if (banheiro) novos[c.id] = banheiro.tempo_alerta_min || 30
+      } catch {}
+    }))
+    setTemposBanheiro(novos)
+  }
+
+  async function salvarTempoBanheiro(cameraId: string, minutos: number) {
+    setSalvandoTempo(cameraId)
+    try {
+      const regioes = await fetch(`${API}/regioes/${cameraId}`).then(r => r.json())
+      const banheiro = Array.isArray(regioes) ? regioes.find((r: any) => r.tipo === 'banheiro') : null
+      if (banheiro?.id) {
+        await fetch(`${API}/regioes/${banheiro.id}/tempo`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tempo_alerta_min: minutos })
+        })
+        setTemposBanheiro(prev => ({ ...prev, [cameraId]: minutos }))
+      }
+    } catch {}
+    finally { setSalvandoTempo(null) }
+  }
+
   async function carregarDados() {
     try {
       const [c, e] = await Promise.all([
         fetch(`${API}/cameras/`).then(r => r.json()),
         fetch(`${API}/empresas/`).then(r => r.json()),
       ])
-      setCameras(Array.isArray(c) ? c : [])
+      const cams = Array.isArray(c) ? c : []
+      setCameras(cams)
       setEmpresas(Array.isArray(e) ? e : [])
+      carregarTemposBanheiro(cams)
     } catch {
       setCameras([])
       setEmpresas([])
     }
   }
 
-  const MARCAS: Record<string, { label: string; template: (u:string,s:string,ip:string,porta:string,canal:string) => string; portaPadrao: string }> = {
+  const MARCAS: Record<string, {
+    label: string
+    template: (u:string,s:string,ip:string,porta:string,canal:string) => string
+    templateHttp?: (u:string,s:string,ip:string,portaHttp:string,canal:string) => string
+    portaPadrao: string
+    portaHttpPadrao?: string
+  }> = {
     intelbras: {
       label: 'Intelbras',
       template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
+      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/snapshot.cgi?channel=${c}`,
       portaPadrao: '554',
+      portaHttpPadrao: '80',
     },
     hikvision: {
       label: 'Hikvision',
       template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/Streaming/Channels/${c}01`,
+      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/Streaming/channels/${c}01/httpPreview`,
       portaPadrao: '554',
+      portaHttpPadrao: '80',
     },
     dahua: {
       label: 'Dahua',
       template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
+      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/mjpg/video.cgi?channel=${c}&subtype=0`,
       portaPadrao: '554',
+      portaHttpPadrao: '80',
     },
     axis: {
       label: 'Axis',
       template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/axis-media/media.amp?camera=${c}`,
+      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/axis-cgi/mjpg/video.cgi?camera=${c}`,
       portaPadrao: '554',
+      portaHttpPadrao: '80',
     },
     generico: {
       label: 'Genérico (URL livre)',
@@ -136,13 +186,18 @@ export default function Dashboard() {
     const m = MARCAS[marca]
     if (m && camIp) {
       setRtspUrl(m.template(camUsuario, camSenha, camIp, camPorta || m.portaPadrao, camCanal))
+      if (m.templateHttp) {
+        setHttpUrl(m.templateHttp(camUsuario, camSenha, camIp, camPortaHttp || m.portaHttpPadrao || '80', camCanal))
+      }
     }
   }
 
   function onMarcaChange(m: string) {
     setMarca(m)
     setCamPorta(MARCAS[m]?.portaPadrao || '554')
+    setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80')
     setRtspUrl('')
+    setHttpUrl('')
   }
 
   async function criarCamera() {
@@ -155,7 +210,7 @@ export default function Dashboard() {
       const res = await fetch(`${API}/cameras/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, empresa_id: empresaId }),
+        body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, http_url: httpUrl || null, empresa_id: empresaId }),
         signal: controller.signal,
       })
       clearTimeout(timeout)
@@ -373,6 +428,18 @@ export default function Dashboard() {
                       onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }}
                       onBlur={gerarUrl}
                     />
+                    {MARCAS[marca]?.templateHttp && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm flex-1"
+                          placeholder="Porta HTTP (ex: 80)"
+                          value={camPortaHttp}
+                          onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }}
+                          onBlur={gerarUrl}
+                        />
+                        <span className="text-gray-400 text-xs">porta HTTP ao vivo</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -385,8 +452,21 @@ export default function Dashboard() {
                     onChange={e => setRtspUrl(e.target.value)}
                   />
                   {rtspUrl && (
-                    <p className="text-green-400 text-xs mt-1 px-1">✓ URL pronta</p>
+                    <p className="text-green-400 text-xs mt-1 px-1">✓ URL RTSP pronta</p>
                   )}
+
+                {/* HTTP URL gerada */}
+                {httpUrl && (
+                  <div>
+                    <input
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
+                      placeholder="URL HTTP ao vivo (gerada automaticamente)"
+                      value={httpUrl}
+                      onChange={e => setHttpUrl(e.target.value)}
+                    />
+                    <p className="text-blue-400 text-xs mt-1 px-1">📹 URL HTTP ao vivo pronta</p>
+                  </div>
+                )}
                 </div>
                 <select
                   className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
@@ -438,6 +518,26 @@ export default function Dashboard() {
                       </div>
                       <p className="text-gray-400 text-sm mt-1 truncate">{c.rtsp_url}</p>
                       <p className="text-gray-500 text-xs mt-1 font-mono">{c.id}</p>
+                      {/* Tempo limite banheiro */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-gray-400 text-xs">🚿 Alerta banheiro:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={temposBanheiro[c.id] ?? 30}
+                          onChange={e => setTemposBanheiro(prev => ({ ...prev, [c.id]: Number(e.target.value) }))}
+                          className="w-16 bg-gray-600 rounded px-2 py-1 text-white text-xs text-center"
+                        />
+                        <span className="text-gray-400 text-xs">min</span>
+                        <button
+                          onClick={() => salvarTempoBanheiro(c.id, temposBanheiro[c.id] ?? 30)}
+                          disabled={salvandoTempo === c.id}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-xs px-2 py-1 rounded transition"
+                        >
+                          {salvandoTempo === c.id ? '...' : 'Salvar'}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

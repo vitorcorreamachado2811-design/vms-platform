@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
@@ -10,6 +10,7 @@ interface Camera {
   id: string
   nome: string
   rtsp_url: string
+  http_url?: string
   ativo: boolean
 }
 
@@ -43,13 +44,13 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [desenhando, setDesenhando]   = useState(false)
   const [inicio, setInicio]           = useState<{x: number, y: number} | null>(null)
   const [preview, setPreview]         = useState<{x1:number,y1:number,x2:number,y2:number} | null>(null)
-  
+
   const intervalRef  = useRef<NodeJS.Timeout | null>(null)
   const aoVivoRef    = useRef(false)
   const imgRef       = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  
-  // Carrega regiÃµes existentes
+
+  // Carrega regiões existentes
   useEffect(() => {
     fetch(`${API}/regioes/${camera.id}`)
       .then(r => r.json())
@@ -62,16 +63,24 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     atualizarSnapshot()
   }, [camera.id])
 
-  function atualizarSnapshot() {
-    setSnapshot(`${API}/cameras/${camera.id}/live?t=${Date.now()}`)
+  function getSnapshotUrl() {
+    // HTTP direto da câmera se disponível, senão via backend
+    return camera.http_url
+      ? `${camera.http_url}&t=${Date.now()}`
+      : `${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`
   }
 
-  // Polling encadeado: sÃ³ pede prÃ³ximo frame DEPOIS que o atual carregou
+  function atualizarSnapshot() {
+    setSnapshot(getSnapshotUrl())
+  }
+
+  // Polling encadeado: só pede próximo frame DEPOIS que o atual carregou
   function proximoFrame() {
     if (!aoVivoRef.current) return
+    const intervalo = camera.http_url ? 200 : 500
     intervalRef.current = setTimeout(() => {
-      setSnapshot(`${API}/cameras/${camera.id}/live?t=${Date.now()}`)
-    }, 500) // 500ms apÃ³s carregar o frame anterior
+      setSnapshot(getSnapshotUrl())
+    }, intervalo)
   }
 
   function iniciarAoVivo() {
@@ -79,7 +88,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setAoVivo(true)
     setErro(null)
     setCarregando(true)
-    
+    atualizarSnapshot()
   }
 
   function pararAoVivo() {
@@ -99,7 +108,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     }
   }, [])
 
-  // â”€â”€ Desenho de regiÃµes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Desenho de regiões ──────────────────────────────────
   function coordsRelativas(e: React.MouseEvent) {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return { x: 0, y: 0 }
@@ -145,7 +154,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setPreview(null)
     setInicio(null)
 
-    // Remove regiÃ£o do mesmo tipo se jÃ¡ existir
+    // Remove região do mesmo tipo se já existir
     const antigas = regioes.filter(r => r.tipo === tipoSelecionado)
     for (const r of antigas) {
       if (r.id) await fetch(`${API}/regioes/${r.id}`, { method: 'DELETE' }).catch(() => {})
@@ -160,7 +169,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       const salva = await res.json()
       setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), salva])
     } catch {
-      setErro('Erro ao salvar regiÃ£o')
+      setErro('Erro ao salvar região')
     }
   }
 
@@ -173,7 +182,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden">
-      {/* Ãrea de vÃ­deo */}
+      {/* Área de vídeo */}
       <div
         ref={containerRef}
         className={`relative bg-black aspect-video select-none ${modoDesenho ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -205,7 +214,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             onLoad={() => { setCarregando(false); if (aoVivo) proximoFrame() }}
             onError={() => {
               setCarregando(false)
-              if (aoVivo) setErro('Sem sinal da cÃ¢mera')
+              if (aoVivo) setErro('Sem sinal da câmera')
             }}
             draggable={false}
           />
@@ -215,13 +224,13 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         {!snapshot && (
           <div className="w-full h-full flex items-center justify-center text-gray-500">
             <div className="text-center">
-              <div className="text-4xl mb-2">ðŸ“·</div>
+              <div className="text-4xl mb-2">📷</div>
               <p className="text-sm">Sem sinal</p>
             </div>
           </div>
         )}
 
-        {/* SVG overlay: regiÃµes salvas + preview */}
+        {/* SVG overlay: regiões salvas + preview */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           {regioes.map(r => (
             <rect
@@ -273,7 +282,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           )}
           {modoDesenho && (
             <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-bold">
-              âœï¸ Desenhando {tipoSelecionado}
+              ✏️ Desenhando {tipoSelecionado}
             </span>
           )}
         </div>
@@ -285,14 +294,14 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </div>
         )}
 
-        {/* BotÃ£o play quando inativo */}
+        {/* Botão play quando inativo */}
         {!aoVivo && !modoDesenho && (
           <button
             onClick={iniciarAoVivo}
             className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition group"
           >
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center group-hover:scale-110 transition">
-              <span className="text-2xl ml-1">â–¶</span>
+              <span className="text-2xl ml-1">▶</span>
             </div>
           </button>
         )}
@@ -307,17 +316,17 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </span>
         </div>
 
-        {erro && <p className="text-red-400 text-xs mb-3">âš  {erro}</p>}
+        {erro && <p className="text-red-400 text-xs mb-3">⚠ {erro}</p>}
 
-        {/* BotÃµes principais */}
+        {/* Botões principais */}
         <div className="flex gap-2 mb-3">
           {aoVivo ? (
             <button onClick={pararAoVivo} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-bold transition">
-              â¹ Parar
+              ⏹ Parar
             </button>
           ) : (
             <button onClick={iniciarAoVivo} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg font-bold transition">
-              â–¶ Ao Vivo
+              ▶ Ao Vivo
             </button>
           )}
           <button
@@ -325,21 +334,21 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition"
             title="Atualizar foto"
           >
-            ðŸ”„
+            🔄
           </button>
           <button
             onClick={() => { setModoDesenho(v => !v); setPreview(null) }}
             className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${modoDesenho ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-            title="Desenhar regiÃµes de IA"
+            title="Desenhar regiões de IA"
           >
-            âœï¸
+            ✏️
           </button>
         </div>
 
         {/* Painel de desenho */}
         {modoDesenho && (
           <div className="bg-gray-900 rounded-lg p-3">
-            <p className="text-gray-400 text-xs mb-2 font-bold">REGIÃ•ES DE IA â€” clique e arraste na imagem</p>
+            <p className="text-gray-400 text-xs mb-2 font-bold">REGIÕES DE IA — clique e arraste na imagem</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {TIPOS_REGIAO.map(tipo => (
                 <button
@@ -356,23 +365,23 @@ function CameraPlayer({ camera }: { camera: Camera }) {
                   } : {}}
                 >
                   {tipo.toUpperCase()}
-                  {regioes.find(r => r.tipo === tipo) ? ' âœ“' : ''}
+                  {regioes.find(r => r.tipo === tipo) ? ' ✓' : ''}
                 </button>
               ))}
             </div>
-            {/* RegiÃµes salvas */}
+            {/* Regiões salvas */}
             {regioes.length > 0 && (
               <div className="space-y-1">
                 {regioes.map(r => (
                   <div key={r.tipo} className="flex items-center justify-between text-xs">
                     <span style={{ color: CORES_REGIAO[r.tipo] }} className="font-bold">
-                      â–  {r.tipo.toUpperCase()}
+                      ■ {r.tipo.toUpperCase()}
                     </span>
                     <button
                       onClick={() => deletarRegiao(r.tipo)}
                       className="text-red-400 hover:text-red-300 transition"
                     >
-                      ðŸ—‘ remover
+                      🗑 remover
                     </button>
                   </div>
                 ))}
@@ -404,15 +413,15 @@ export default function CamerasPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-blue-400">CÃ¢meras ao Vivo</h1>
-            <p className="text-gray-400 mt-1">{cameras.length} cÃ¢mera{cameras.length !== 1 ? 's' : ''} cadastrada{cameras.length !== 1 ? 's' : ''}</p>
+            <h1 className="text-3xl font-bold text-blue-400">Câmeras ao Vivo</h1>
+            <p className="text-gray-400 mt-1">{cameras.length} câmera{cameras.length !== 1 ? 's' : ''} cadastrada{cameras.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex gap-3">
             <Link href="/eventos" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">
-              âš¡ Eventos
+              ⚡ Eventos
             </Link>
             <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">
-              â† Dashboard
+              ← Dashboard
             </Link>
           </div>
         </div>
@@ -423,10 +432,10 @@ export default function CamerasPage() {
           </div>
         ) : cameras.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
-            <div className="text-5xl mb-4">ðŸ“·</div>
-            <p className="text-xl">Nenhuma cÃ¢mera cadastrada</p>
+            <div className="text-5xl mb-4">📷</div>
+            <p className="text-xl">Nenhuma câmera cadastrada</p>
             <Link href="/configuracoes" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">
-              + Adicionar cÃ¢mera
+              + Adicionar câmera
             </Link>
           </div>
         ) : (
@@ -440,4 +449,3 @@ export default function CamerasPage() {
     </main>
   )
 }
-
