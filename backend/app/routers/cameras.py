@@ -231,8 +231,11 @@ async def stream_mjpeg(camera_id: UUID, db: Session = Depends(get_db)):
     if not camera:
         raise HTTPException(status_code=404, detail="CÃ¢mera nÃ£o encontrada")
 
+    async def generate():
+        async for chunk in _gerar_mjpeg_async(camera.rtsp_url):
+            yield chunk
     return StreamingResponse(
-        _gerar_mjpeg_async(camera.rtsp_url),
+        generate(),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
     )
