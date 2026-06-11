@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useAuth } from '../hooks/useAuth'
 
-const API = 'https://vms-platform-production.up.railway.app'
+const API          = 'https://vms-platform-production.up.railway.app'
+const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
+const LIVE_FPS     = 10  // frames por segundo
 
 interface Camera {
   id: string
@@ -33,20 +34,23 @@ const CORES_REGIAO: Record<string, string> = {
 
 const TIPOS_REGIAO = ['cama', 'banheiro', 'cozinha', 'quarto']
 
+function liveUrl(cameraId: string) {
+  return `${SUPABASE_URL}/storage/v1/object/public/live-frames/live/${cameraId}.jpg`
+}
+
 function CameraPlayer({ camera }: { camera: Camera }) {
   const [aoVivo, setAoVivo]           = useState(false)
-  const [snapshot, setSnapshot]       = useState<string | null>(null)
-  const [carregando, setCarregando]   = useState(false)
-  const [erro, setErro]               = useState<string | null>(null)
+  const [src, setSrc]                 = useState<string>(`${liveUrl(camera.id)}?t=${Date.now()}`)
+  const [online, setOnline]           = useState(true)
   const [modoDesenho, setModoDesenho] = useState(false)
   const [tipoSelecionado, setTipoSelecionado] = useState('quarto')
   const [regioes, setRegioes]         = useState<Regiao[]>([])
   const [desenhando, setDesenhando]   = useState(false)
   const [inicio, setInicio]           = useState<{x: number, y: number} | null>(null)
   const [preview, setPreview]         = useState<{x1:number,y1:number,x2:number,y2:number} | null>(null)
+  const [erro, setErro]               = useState<string | null>(null)
 
   const intervalRef  = useRef<NodeJS.Timeout | null>(null)
-  const aoVivoRef    = useRef(false)
   const imgRef       = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -58,59 +62,34 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       .catch(() => {})
   }, [camera.id])
 
-  // Snapshot inicial
+  // Loop ao vivo via CDN Supabase
   useEffect(() => {
-    atualizarSnapshot()
-  }, [camera.id])
+    if (!aoVivo) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      return
+    }
+    intervalRef.current = setInterval(() => {
+      setSrc(`${liveUrl(camera.id)}?t=${Date.now()}`)
+    }, 1000 / LIVE_FPS)
 
-  // URL MJPEG stream (conexao unica, frames continuos)
-  const mjpegStreamUrl = camera.http_url
-    ? `${API}/cameras/${camera.id}/stream/mjpeg`
-    : null
-
-  function getSnapshotUrl() {
-    return `${API}/cameras/${camera.id}/live?t=${Date.now()}`
-  }
-
-  function atualizarSnapshot() {
-    if (!mjpegStreamUrl) setSnapshot(getSnapshotUrl())
-  }
-
-  function proximoFrame() {
-    if (!aoVivoRef.current || mjpegStreamUrl) return
-    intervalRef.current = setTimeout(() => {
-      setSnapshot(getSnapshotUrl())
-    }, 500)
-  }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [aoVivo, camera.id])
 
   function iniciarAoVivo() {
-    aoVivoRef.current = true
-    setAoVivo(true)
     setErro(null)
-    setCarregando(true)
-    if (mjpegStreamUrl) {
-      setSnapshot(mjpegStreamUrl)  // MJPEG: uma URL, stream continuo
-    } else {
-      atualizarSnapshot()
-    }
+    setAoVivo(true)
+    setSrc(`${liveUrl(camera.id)}?t=${Date.now()}`)
   }
 
   function pararAoVivo() {
-    aoVivoRef.current = false
     setAoVivo(false)
-    if (intervalRef.current) {
-      clearTimeout(intervalRef.current)
-      intervalRef.current = null
-    }
   }
 
-  // Limpa ao desmontar
-  useEffect(() => {
-    return () => {
-      aoVivoRef.current = false
-      if (intervalRef.current) clearTimeout(intervalRef.current)
-    }
-  }, [])
+  function atualizarSnapshot() {
+    setSrc(`${liveUrl(camera.id)}?t=${Date.now()}`)
+  }
 
   // ── Desenho de regiões ──────────────────────────────────
   function coordsRelativas(e: React.MouseEvent) {
@@ -158,7 +137,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setPreview(null)
     setInicio(null)
 
-    // Remove região do mesmo tipo se já existir
     const antigas = regioes.filter(r => r.tipo === tipoSelecionado)
     for (const r of antigas) {
       if (r.id) await fetch(`${API}/regioes/${r.id}`, { method: 'DELETE' }).catch(() => {})
@@ -194,31 +172,15 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
       >
-        {/* Snapshot ao vivo */}
-        {snapshot ? (
-          <img
-            ref={imgRef}
-            src={snapshot}
-            alt={camera.nome}
-            className="w-full h-full object-cover"
-            onLoad={() => { setCarregando(false); if (aoVivo) proximoFrame() }}
-            onError={() => {
-              setCarregando(false)
-              if (aoVivo) setErro('Sem sinal da câmera')
-            }}
-            draggable={false}
-          />
-        ) : null}
-
-        {/* Placeholder */}
-        {!snapshot && (
-          <div className="w-full h-full flex items-center justify-center text-gray-500">
-            <div className="text-center">
-              <div className="text-4xl mb-2">📷</div>
-              <p className="text-sm">Sem sinal</p>
-            </div>
-          </div>
-        )}
+        <img
+          ref={imgRef}
+          src={src}
+          alt={camera.nome}
+          className="w-full h-full object-cover"
+          onLoad={() => setOnline(true)}
+          onError={() => setOnline(false)}
+          draggable={false}
+        />
 
         {/* SVG overlay: regiões salvas + preview */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
@@ -262,12 +224,12 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           )}
         </svg>
 
-        {/* Badge AO VIVO */}
+        {/* Badges status */}
         <div className="absolute top-2 left-2 flex gap-2">
           {aoVivo && (
-            <span className="bg-red-600 text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              AO VIVO
+            <span className={`text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1 ${online ? 'bg-red-600' : 'bg-gray-600'}`}>
+              <span className={`w-2 h-2 rounded-full ${online ? 'bg-white animate-pulse' : 'bg-gray-400'}`} />
+              {online ? 'AO VIVO' : 'SEM SINAL'}
             </span>
           )}
           {modoDesenho && (
@@ -276,13 +238,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             </span>
           )}
         </div>
-
-        {/* Spinner carregando */}
-        {carregando && aoVivo && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
 
         {/* Botão play quando inativo */}
         {!aoVivo && !modoDesenho && (
@@ -308,7 +263,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 
         {erro && <p className="text-red-400 text-xs mb-3">⚠ {erro}</p>}
 
-        {/* Botões principais */}
         <div className="flex gap-2 mb-3">
           {aoVivo ? (
             <button onClick={pararAoVivo} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-bold transition">
@@ -359,7 +313,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
                 </button>
               ))}
             </div>
-            {/* Regiões salvas */}
             {regioes.length > 0 && (
               <div className="space-y-1">
                 {regioes.map(r => (
@@ -385,7 +338,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 }
 
 export default function CamerasPage() {
-  const [cameras, setCameras] = useState<Camera[]>([])
+  const [cameras, setCameras]     = useState<Camera[]>([])
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
