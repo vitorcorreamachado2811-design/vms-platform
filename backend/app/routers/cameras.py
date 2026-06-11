@@ -102,6 +102,18 @@ def _fazer_delete(camera_id: UUID, db: Session):
 
 # â”€â”€ SNAPSHOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+@router.get("/{camera_id}/live")
+def live_frame(camera_id: UUID):
+    """Serve o frame mais recente capturado pelo worker (sem abrir RTSP)."""
+    live_path = f"/tmp/live_{camera_id}.jpg"
+    if os.path.exists(live_path):
+        return Response(
+            content=open(live_path, "rb").read(),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-cache", "X-From-Worker": "true"}
+        )
+    raise HTTPException(status_code=503, detail="Frame nao disponivel ainda")
+
 @router.get("/{camera_id}/snapshot")
 def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()

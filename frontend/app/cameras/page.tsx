@@ -63,14 +63,14 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   }, [camera.id])
 
   function atualizarSnapshot() {
-    setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
+    setSnapshot(`${API}/cameras/${camera.id}/live?t=${Date.now()}`)
   }
 
   // Polling encadeado: sÃ³ pede prÃ³ximo frame DEPOIS que o atual carregou
   function proximoFrame() {
     if (!aoVivoRef.current) return
     intervalRef.current = setTimeout(() => {
-      setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
+      setSnapshot(`${API}/cameras/${camera.id}/live?t=${Date.now()}`)
     }, 500) // 500ms apÃ³s carregar o frame anterior
   }
 
