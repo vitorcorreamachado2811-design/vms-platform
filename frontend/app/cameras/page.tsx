@@ -64,10 +64,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   }, [camera.id])
 
   function getSnapshotUrl() {
-    // HTTP direto da câmera se disponível, senão via backend
-    return camera.http_url
-      ? `${camera.http_url}&t=${Date.now()}`
-      : `${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`
+    // Sempre via backend /live (que faz proxy da câmera HTTP ou usa worker)
+    return `${API}/cameras/${camera.id}/live?t=${Date.now()}`
   }
 
   function atualizarSnapshot() {

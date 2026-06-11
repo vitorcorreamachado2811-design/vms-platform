@@ -106,6 +106,24 @@ def _fazer_delete(camera_id: UUID, db: Session):
 
 # ── SNAPSHOT ─────────────────────────────────────────────────────────────────
 
+@router.get("/{camera_id}/live")
+def live_frame(camera_id: UUID, db: Session = Depends(get_db)):
+    import requests as req
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if camera and camera.http_url:
+        try:
+            r = req.get(camera.http_url, timeout=3, verify=False)
+            if r.status_code == 200 and len(r.content) > 1000:
+                return Response(content=r.content, media_type="image/jpeg",
+                               headers={"Cache-Control": "no-cache"})
+        except:
+            pass
+    live_path = f"/tmp/live_{camera_id}.jpg"
+    if os.path.exists(live_path):
+        return Response(content=open(live_path, "rb").read(), media_type="image/jpeg",
+                       headers={"Cache-Control": "no-cache"})
+    raise HTTPException(status_code=503, detail="Frame nao disponivel ainda")
+
 @router.get("/{camera_id}/snapshot")
 def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
