@@ -54,7 +54,6 @@ class LinhaContagem(Base):
     y1 = Column(Float, nullable=False)
     x2 = Column(Float, nullable=False)
     y2 = Column(Float, nullable=False)
-    tempo_alerta_min = Column(Integer, nullable=True, default=30)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
     atualizado_em = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
