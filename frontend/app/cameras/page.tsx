@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 const API          = 'https://vms-platform-production.up.railway.app'
 const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
-const LIVE_FPS     = 10  // frames por segundo
+const LIVE_FPS     = 10
 
 interface Camera {
   id: string
@@ -40,7 +40,9 @@ function liveUrl(cameraId: string) {
 
 function CameraPlayer({ camera }: { camera: Camera }) {
   const [aoVivo, setAoVivo]           = useState(false)
-  const [src, setSrc]                 = useState<string>(`${liveUrl(camera.id)}?t=${Date.now()}`)
+  const [bufA, setBufA]               = useState<string>('')
+  const [bufB, setBufB]               = useState<string>('')
+  const [ativo, setAtivo]             = useState<'A' | 'B'>('A')
   const [online, setOnline]           = useState(true)
   const [modoDesenho, setModoDesenho] = useState(false)
   const [tipoSelecionado, setTipoSelecionado] = useState('quarto')
@@ -51,10 +53,11 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [erro, setErro]               = useState<string | null>(null)
 
   const intervalRef  = useRef<NodeJS.Timeout | null>(null)
-  const imgRef       = useRef<HTMLImageElement>(null)
+  const ativoRef     = useRef<'A' | 'B'>('A')
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Carrega regiões existentes
+  useEffect(() => { ativoRef.current = ativo }, [ativo])
+
   useEffect(() => {
     fetch(`${API}/regioes/${camera.id}`)
       .then(r => r.json())
@@ -62,14 +65,28 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       .catch(() => {})
   }, [camera.id])
 
-  // Loop ao vivo via CDN Supabase
   useEffect(() => {
     if (!aoVivo) {
       if (intervalRef.current) clearInterval(intervalRef.current)
       return
     }
+
+    const url = `${liveUrl(camera.id)}?t=${Date.now()}`
+    setBufA(url)
+
     intervalRef.current = setInterval(() => {
-      setSrc(`${liveUrl(camera.id)}?t=${Date.now()}`)
+      const nextUrl = `${liveUrl(camera.id)}?t=${Date.now()}`
+      const proximo = ativoRef.current === 'A' ? 'B' : 'A'
+
+      const img = new Image()
+      img.onload = () => {
+        if (proximo === 'B') setBufB(nextUrl)
+        else setBufA(nextUrl)
+        setAtivo(proximo)
+        setOnline(true)
+      }
+      img.onerror = () => setOnline(false)
+      img.src = nextUrl
     }, 1000 / LIVE_FPS)
 
     return () => {
@@ -80,18 +97,19 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   function iniciarAoVivo() {
     setErro(null)
     setAoVivo(true)
-    setSrc(`${liveUrl(camera.id)}?t=${Date.now()}`)
   }
 
   function pararAoVivo() {
     setAoVivo(false)
+    if (intervalRef.current) clearInterval(intervalRef.current)
   }
 
   function atualizarSnapshot() {
-    setSrc(`${liveUrl(camera.id)}?t=${Date.now()}`)
+    const url = `${liveUrl(camera.id)}?t=${Date.now()}`
+    setBufA(url)
+    setAtivo('A')
   }
 
-  // ── Desenho de regiões ──────────────────────────────────
   function coordsRelativas(e: React.MouseEvent) {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return { x: 0, y: 0 }
@@ -104,9 +122,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   function onMouseDown(e: React.MouseEvent) {
     if (!modoDesenho) return
     e.preventDefault()
-    const p = coordsRelativas(e)
     setDesenhando(true)
-    setInicio(p)
+    setInicio(coordsRelativas(e))
     setPreview(null)
   }
 
@@ -141,7 +158,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     for (const r of antigas) {
       if (r.id) await fetch(`${API}/regioes/${r.id}`, { method: 'DELETE' }).catch(() => {})
     }
-
     try {
       const res = await fetch(`${API}/regioes/`, {
         method: 'POST',
@@ -164,7 +180,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden">
-      {/* Área de vídeo */}
       <div
         ref={containerRef}
         className={`relative bg-black aspect-video select-none ${modoDesenho ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -172,59 +187,60 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
       >
+        {/* Double buffer — dois <img> sobrepostos, só um visível */}
         <img
-          ref={imgRef}
-          src={src}
+          src={bufA}
           alt={camera.nome}
-          className="w-full h-full object-cover"
-          onLoad={() => setOnline(true)}
-          onError={() => setOnline(false)}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-75"
+          style={{ opacity: ativo === 'A' ? 1 : 0 }}
+          draggable={false}
+        />
+        <img
+          src={bufB}
+          alt={camera.nome}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-75"
+          style={{ opacity: ativo === 'B' ? 1 : 0 }}
           draggable={false}
         />
 
-        {/* SVG overlay: regiões salvas + preview */}
+        {!bufA && !bufB && (
+          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+            <div className="text-center">
+              <div className="text-4xl mb-2">📷</div>
+              <p className="text-sm">Sem sinal</p>
+            </div>
+          </div>
+        )}
+
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           {regioes.map(r => (
             <rect
               key={r.tipo}
-              x={`${r.x1 * 100}%`}
-              y={`${r.y1 * 100}%`}
-              width={`${(r.x2 - r.x1) * 100}%`}
-              height={`${(r.y2 - r.y1) * 100}%`}
-              fill={CORES_REGIAO[r.tipo] + '33'}
-              stroke={CORES_REGIAO[r.tipo]}
-              strokeWidth="2"
-              rx="4"
+              x={`${r.x1 * 100}%`} y={`${r.y1 * 100}%`}
+              width={`${(r.x2 - r.x1) * 100}%`} height={`${(r.y2 - r.y1) * 100}%`}
+              fill={CORES_REGIAO[r.tipo] + '33'} stroke={CORES_REGIAO[r.tipo]}
+              strokeWidth="2" rx="4"
             />
           ))}
           {regioes.map(r => (
             <text
               key={r.tipo + '_label'}
-              x={`${r.x1 * 100 + 1}%`}
-              y={`${r.y1 * 100 + 5}%`}
-              fill={CORES_REGIAO[r.tipo]}
-              fontSize="12"
-              fontWeight="bold"
+              x={`${r.x1 * 100 + 1}%`} y={`${r.y1 * 100 + 5}%`}
+              fill={CORES_REGIAO[r.tipo]} fontSize="12" fontWeight="bold"
             >
               {r.tipo.toUpperCase()}
             </text>
           ))}
           {preview && (
             <rect
-              x={`${preview.x1 * 100}%`}
-              y={`${preview.y1 * 100}%`}
-              width={`${(preview.x2 - preview.x1) * 100}%`}
-              height={`${(preview.y2 - preview.y1) * 100}%`}
-              fill={CORES_REGIAO[tipoSelecionado] + '44'}
-              stroke={CORES_REGIAO[tipoSelecionado]}
-              strokeWidth="2"
-              strokeDasharray="6,3"
-              rx="4"
+              x={`${preview.x1 * 100}%`} y={`${preview.y1 * 100}%`}
+              width={`${(preview.x2 - preview.x1) * 100}%`} height={`${(preview.y2 - preview.y1) * 100}%`}
+              fill={CORES_REGIAO[tipoSelecionado] + '44'} stroke={CORES_REGIAO[tipoSelecionado]}
+              strokeWidth="2" strokeDasharray="6,3" rx="4"
             />
           )}
         </svg>
 
-        {/* Badges status */}
         <div className="absolute top-2 left-2 flex gap-2">
           {aoVivo && (
             <span className={`text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1 ${online ? 'bg-red-600' : 'bg-gray-600'}`}>
@@ -234,12 +250,11 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           )}
           {modoDesenho && (
             <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-bold">
-              ✏️ Desenhando {tipoSelecionado}
+              ✏️ {tipoSelecionado}
             </span>
           )}
         </div>
 
-        {/* Botão play quando inativo */}
         {!aoVivo && !modoDesenho && (
           <button
             onClick={iniciarAoVivo}
@@ -252,7 +267,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         )}
       </div>
 
-      {/* Controles */}
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-white">{camera.nome}</h3>
@@ -273,23 +287,17 @@ function CameraPlayer({ camera }: { camera: Camera }) {
               ▶ Ao Vivo
             </button>
           )}
-          <button
-            onClick={atualizarSnapshot}
-            className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition"
-            title="Atualizar foto"
-          >
+          <button onClick={atualizarSnapshot} className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition" title="Atualizar">
             🔄
           </button>
           <button
             onClick={() => { setModoDesenho(v => !v); setPreview(null) }}
             className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${modoDesenho ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-            title="Desenhar regiões de IA"
           >
             ✏️
           </button>
         </div>
 
-        {/* Painel de desenho */}
         {modoDesenho && (
           <div className="bg-gray-900 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-2 font-bold">REGIÕES DE IA — clique e arraste na imagem</p>
@@ -299,17 +307,14 @@ function CameraPlayer({ camera }: { camera: Camera }) {
                   key={tipo}
                   onClick={() => setTipoSelecionado(tipo)}
                   className={`text-xs py-1.5 px-2 rounded-lg font-bold transition border-2 ${
-                    tipoSelecionado === tipo
-                      ? 'text-white'
-                      : 'bg-gray-800 text-gray-400 border-gray-700'
+                    tipoSelecionado === tipo ? 'text-white' : 'bg-gray-800 text-gray-400 border-gray-700'
                   }`}
                   style={tipoSelecionado === tipo ? {
                     backgroundColor: CORES_REGIAO[tipo] + 'CC',
                     borderColor: CORES_REGIAO[tipo]
                   } : {}}
                 >
-                  {tipo.toUpperCase()}
-                  {regioes.find(r => r.tipo === tipo) ? ' ✓' : ''}
+                  {tipo.toUpperCase()}{regioes.find(r => r.tipo === tipo) ? ' ✓' : ''}
                 </button>
               ))}
             </div>
@@ -317,15 +322,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
               <div className="space-y-1">
                 {regioes.map(r => (
                   <div key={r.tipo} className="flex items-center justify-between text-xs">
-                    <span style={{ color: CORES_REGIAO[r.tipo] }} className="font-bold">
-                      ■ {r.tipo.toUpperCase()}
-                    </span>
-                    <button
-                      onClick={() => deletarRegiao(r.tipo)}
-                      className="text-red-400 hover:text-red-300 transition"
-                    >
-                      🗑 remover
-                    </button>
+                    <span style={{ color: CORES_REGIAO[r.tipo] }} className="font-bold">■ {r.tipo.toUpperCase()}</span>
+                    <button onClick={() => deletarRegiao(r.tipo)} className="text-red-400 hover:text-red-300 transition">🗑 remover</button>
                   </div>
                 ))}
               </div>
@@ -338,16 +336,13 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 }
 
 export default function CamerasPage() {
-  const [cameras, setCameras]     = useState<Camera[]>([])
+  const [cameras, setCameras]       = useState<Camera[]>([])
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
     fetch(`${API}/cameras/`)
       .then(r => r.json())
-      .then(data => {
-        setCameras(Array.isArray(data) ? data : [])
-        setCarregando(false)
-      })
+      .then(data => { setCameras(Array.isArray(data) ? data : []); setCarregando(false) })
       .catch(() => setCarregando(false))
   }, [])
 
@@ -360,12 +355,8 @@ export default function CamerasPage() {
             <p className="text-gray-400 mt-1">{cameras.length} câmera{cameras.length !== 1 ? 's' : ''} cadastrada{cameras.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex gap-3">
-            <Link href="/eventos" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">
-              ⚡ Eventos
-            </Link>
-            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">
-              ← Dashboard
-            </Link>
+            <Link href="/eventos" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">⚡ Eventos</Link>
+            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">← Dashboard</Link>
           </div>
         </div>
 
@@ -377,9 +368,7 @@ export default function CamerasPage() {
           <div className="text-center py-20 text-gray-500">
             <div className="text-5xl mb-4">📷</div>
             <p className="text-xl">Nenhuma câmera cadastrada</p>
-            <Link href="/configuracoes" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">
-              + Adicionar câmera
-            </Link>
+            <Link href="/configuracoes" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">+ Adicionar câmera</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
