@@ -108,7 +108,7 @@ def _fazer_delete(camera_id: UUID, db: Session):
 
 @router.get("/{camera_id}/live")
 def live_frame(camera_id: UUID, db: Session = Depends(get_db)):
-        camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if camera and camera.http_url:
         try:
             import urllib.request, base64, urllib.parse
@@ -313,4 +313,5 @@ def parar_stream_endpoint(camera_id: UUID):
 @router.get("/streams/status")
 def status_streams():
     return {cid: processos_ffmpeg[cid].poll() is None for cid in processos_ffmpeg}
+
 
