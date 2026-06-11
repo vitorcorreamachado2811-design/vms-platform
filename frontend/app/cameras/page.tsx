@@ -63,22 +63,24 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     atualizarSnapshot()
   }, [camera.id])
 
+  // URL MJPEG stream (conexao unica, frames continuos)
+  const mjpegStreamUrl = camera.http_url
+    ? `${API}/cameras/${camera.id}/stream/mjpeg`
+    : null
+
   function getSnapshotUrl() {
-    // Sempre via backend /live (que faz proxy da câmera HTTP ou usa worker)
     return `${API}/cameras/${camera.id}/live?t=${Date.now()}`
   }
 
   function atualizarSnapshot() {
-    setSnapshot(getSnapshotUrl())
+    if (!mjpegStreamUrl) setSnapshot(getSnapshotUrl())
   }
 
-  // Polling encadeado: só pede próximo frame DEPOIS que o atual carregou
   function proximoFrame() {
-    if (!aoVivoRef.current) return
-    const intervalo = camera.http_url ? 200 : 500
+    if (!aoVivoRef.current || mjpegStreamUrl) return
     intervalRef.current = setTimeout(() => {
       setSnapshot(getSnapshotUrl())
-    }, intervalo)
+    }, 500)
   }
 
   function iniciarAoVivo() {
@@ -86,7 +88,11 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setAoVivo(true)
     setErro(null)
     setCarregando(true)
-    atualizarSnapshot()
+    if (mjpegStreamUrl) {
+      setSnapshot(mjpegStreamUrl)  // MJPEG: uma URL, stream continuo
+    } else {
+      atualizarSnapshot()
+    }
   }
 
   function pararAoVivo() {
