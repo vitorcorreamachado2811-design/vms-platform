@@ -5,6 +5,7 @@ import Link from 'next/link'
 
 const API          = 'https://vms-platform-production.up.railway.app'
 const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const LIVE_FPS     = 10
 
 interface Camera {
@@ -25,6 +26,36 @@ interface Regiao {
   y2: number
 }
 
+interface Analiticos {
+  queda_leito: boolean
+  queda_pe: boolean
+  pessoa: boolean
+  banheiro_tempo: boolean
+  gesto_socorro: boolean
+  linha_contagem: boolean
+  habitos: boolean
+}
+
+const ANALITICOS_DEFAULT: Analiticos = {
+  queda_leito:    true,
+  queda_pe:       true,
+  pessoa:         true,
+  banheiro_tempo: true,
+  gesto_socorro:  true,
+  linha_contagem: true,
+  habitos:        true,
+}
+
+const ANALITICOS_INFO: { key: keyof Analiticos; label: string; icon: string; cor: string }[] = [
+  { key: 'queda_leito',    label: 'Queda do Leito',    icon: '🛏️', cor: '#EF4444' },
+  { key: 'queda_pe',       label: 'Queda em Pé',       icon: '🚨', cor: '#F97316' },
+  { key: 'pessoa',         label: 'Pessoa Detectada',  icon: '👤', cor: '#3B82F6' },
+  { key: 'banheiro_tempo', label: 'Banheiro (tempo)',  icon: '🚿', cor: '#8B5CF6' },
+  { key: 'gesto_socorro',  label: 'Gesto de Socorro',  icon: '🙋', cor: '#EC4899' },
+  { key: 'linha_contagem', label: 'Linha de Contagem', icon: '↔️', cor: '#10B981' },
+  { key: 'habitos',        label: 'Hábitos',           icon: '📊', cor: '#F59E0B' },
+]
+
 const CORES_REGIAO: Record<string, string> = {
   cama:     '#3B82F6',
   banheiro: '#8B5CF6',
@@ -36,6 +67,51 @@ const TIPOS_REGIAO = ['cama', 'banheiro', 'cozinha', 'quarto']
 
 function liveUrl(cameraId: string) {
   return `${SUPABASE_URL}/storage/v1/object/public/live-frames/live/${cameraId}.jpg`
+}
+
+async function carregarAnaliticos(cameraId: string): Promise<Analiticos> {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/camera_analiticos?camera_id=eq.${cameraId}&select=*`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    const data = await res.json()
+    if (data && data[0]) {
+      const { camera_id, updated_at, ...rest } = data[0]
+      return rest as Analiticos
+    }
+  } catch {}
+  return { ...ANALITICOS_DEFAULT }
+}
+
+async function salvarAnaliticos(cameraId: string, analiticos: Analiticos) {
+  await fetch(`${SUPABASE_URL}/rest/v1/camera_analiticos`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({ camera_id: cameraId, ...analiticos, updated_at: new Date().toISOString() }),
+  })
+}
+
+function Toggle({ ativo, onChange }: { ativo: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+        ativo ? 'bg-green-500' : 'bg-gray-600'
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+          ativo ? 'translate-x-4' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  )
 }
 
 function CameraPlayer({ camera }: { camera: Camera }) {
@@ -51,6 +127,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [inicio, setInicio]           = useState<{x: number, y: number} | null>(null)
   const [preview, setPreview]         = useState<{x1:number,y1:number,x2:number,y2:number} | null>(null)
   const [erro, setErro]               = useState<string | null>(null)
+  const [abaAtiva, setAbaAtiva]       = useState<'regioes' | 'analiticos' | null>(null)
+  const [analiticos, setAnaliticos]   = useState<Analiticos>({ ...ANALITICOS_DEFAULT })
+  const [salvando, setSalvando]       = useState(false)
 
   const intervalRef  = useRef<NodeJS.Timeout | null>(null)
   const ativoRef     = useRef<'A' | 'B'>('A')
@@ -63,6 +142,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       .then(r => r.json())
       .then(data => setRegioes(Array.isArray(data) ? data : []))
       .catch(() => {})
+    carregarAnaliticos(camera.id).then(setAnaliticos)
   }, [camera.id])
 
   useEffect(() => {
@@ -70,14 +150,10 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       if (intervalRef.current) clearInterval(intervalRef.current)
       return
     }
-
-    const url = `${liveUrl(camera.id)}?t=${Date.now()}`
-    setBufA(url)
-
+    setBufA(`${liveUrl(camera.id)}?t=${Date.now()}`)
     intervalRef.current = setInterval(() => {
       const nextUrl = `${liveUrl(camera.id)}?t=${Date.now()}`
       const proximo = ativoRef.current === 'A' ? 'B' : 'A'
-
       const img = new Image()
       img.onload = () => {
         if (proximo === 'B') setBufB(nextUrl)
@@ -88,26 +164,15 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       img.onerror = () => setOnline(false)
       img.src = nextUrl
     }, 1000 / LIVE_FPS)
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [aoVivo, camera.id])
 
-  function iniciarAoVivo() {
-    setErro(null)
-    setAoVivo(true)
-  }
-
-  function pararAoVivo() {
-    setAoVivo(false)
-    if (intervalRef.current) clearInterval(intervalRef.current)
-  }
-
-  function atualizarSnapshot() {
-    const url = `${liveUrl(camera.id)}?t=${Date.now()}`
-    setBufA(url)
-    setAtivo('A')
+  async function toggleAnalitico(key: keyof Analiticos) {
+    const novo = { ...analiticos, [key]: !analiticos[key] }
+    setAnaliticos(novo)
+    setSalvando(true)
+    await salvarAnaliticos(camera.id, novo)
+    setSalvando(false)
   }
 
   function coordsRelativas(e: React.MouseEvent) {
@@ -131,10 +196,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     if (!modoDesenho || !desenhando || !inicio) return
     const p = coordsRelativas(e)
     setPreview({
-      x1: Math.min(inicio.x, p.x),
-      y1: Math.min(inicio.y, p.y),
-      x2: Math.max(inicio.x, p.x),
-      y2: Math.max(inicio.y, p.y),
+      x1: Math.min(inicio.x, p.x), y1: Math.min(inicio.y, p.y),
+      x2: Math.max(inicio.x, p.x), y2: Math.max(inicio.y, p.y),
     })
   }
 
@@ -143,17 +206,12 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setDesenhando(false)
     const p = coordsRelativas(e)
     const nova: Regiao = {
-      camera_id: camera.id,
-      tipo: tipoSelecionado,
-      x1: Math.min(inicio.x, p.x),
-      y1: Math.min(inicio.y, p.y),
-      x2: Math.max(inicio.x, p.x),
-      y2: Math.max(inicio.y, p.y),
+      camera_id: camera.id, tipo: tipoSelecionado,
+      x1: Math.min(inicio.x, p.x), y1: Math.min(inicio.y, p.y),
+      x2: Math.max(inicio.x, p.x), y2: Math.max(inicio.y, p.y),
     }
     if (nova.x2 - nova.x1 < 0.02 || nova.y2 - nova.y1 < 0.02) return
-    setPreview(null)
-    setInicio(null)
-
+    setPreview(null); setInicio(null)
     const antigas = regioes.filter(r => r.tipo === tipoSelecionado)
     for (const r of antigas) {
       if (r.id) await fetch(`${API}/regioes/${r.id}`, { method: 'DELETE' }).catch(() => {})
@@ -166,9 +224,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       })
       const salva = await res.json()
       setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), salva])
-    } catch {
-      setErro('Erro ao salvar região')
-    }
+    } catch { setErro('Erro ao salvar região') }
   }
 
   async function deletarRegiao(tipo: string) {
@@ -178,66 +234,44 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setRegioes(prev => prev.filter(r => r.tipo !== tipo))
   }
 
+  const ativos = Object.values(analiticos).filter(Boolean).length
+
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden">
+      {/* Área de vídeo */}
       <div
         ref={containerRef}
         className={`relative bg-black aspect-video select-none ${modoDesenho ? 'cursor-crosshair' : 'cursor-default'}`}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
       >
-        {/* Double buffer — dois <img> sobrepostos, só um visível */}
-        <img
-          src={bufA}
-          alt={camera.nome}
+        <img src={bufA} alt={camera.nome} draggable={false}
           className="absolute inset-0 w-full h-full object-cover transition-opacity duration-75"
-          style={{ opacity: ativo === 'A' ? 1 : 0 }}
-          draggable={false}
-        />
-        <img
-          src={bufB}
-          alt={camera.nome}
+          style={{ opacity: ativo === 'A' ? 1 : 0 }} />
+        <img src={bufB} alt={camera.nome} draggable={false}
           className="absolute inset-0 w-full h-full object-cover transition-opacity duration-75"
-          style={{ opacity: ativo === 'B' ? 1 : 0 }}
-          draggable={false}
-        />
+          style={{ opacity: ativo === 'B' ? 1 : 0 }} />
 
         {!bufA && !bufB && (
           <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            <div className="text-center">
-              <div className="text-4xl mb-2">📷</div>
-              <p className="text-sm">Sem sinal</p>
-            </div>
+            <div className="text-center"><div className="text-4xl mb-2">📷</div><p className="text-sm">Sem sinal</p></div>
           </div>
         )}
 
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           {regioes.map(r => (
-            <rect
-              key={r.tipo}
-              x={`${r.x1 * 100}%`} y={`${r.y1 * 100}%`}
-              width={`${(r.x2 - r.x1) * 100}%`} height={`${(r.y2 - r.y1) * 100}%`}
-              fill={CORES_REGIAO[r.tipo] + '33'} stroke={CORES_REGIAO[r.tipo]}
-              strokeWidth="2" rx="4"
-            />
+            <rect key={r.tipo} x={`${r.x1*100}%`} y={`${r.y1*100}%`}
+              width={`${(r.x2-r.x1)*100}%`} height={`${(r.y2-r.y1)*100}%`}
+              fill={CORES_REGIAO[r.tipo]+'33'} stroke={CORES_REGIAO[r.tipo]} strokeWidth="2" rx="4" />
           ))}
           {regioes.map(r => (
-            <text
-              key={r.tipo + '_label'}
-              x={`${r.x1 * 100 + 1}%`} y={`${r.y1 * 100 + 5}%`}
-              fill={CORES_REGIAO[r.tipo]} fontSize="12" fontWeight="bold"
-            >
-              {r.tipo.toUpperCase()}
-            </text>
+            <text key={r.tipo+'_label'} x={`${r.x1*100+1}%`} y={`${r.y1*100+5}%`}
+              fill={CORES_REGIAO[r.tipo]} fontSize="12" fontWeight="bold">{r.tipo.toUpperCase()}</text>
           ))}
           {preview && (
-            <rect
-              x={`${preview.x1 * 100}%`} y={`${preview.y1 * 100}%`}
-              width={`${(preview.x2 - preview.x1) * 100}%`} height={`${(preview.y2 - preview.y1) * 100}%`}
-              fill={CORES_REGIAO[tipoSelecionado] + '44'} stroke={CORES_REGIAO[tipoSelecionado]}
-              strokeWidth="2" strokeDasharray="6,3" rx="4"
-            />
+            <rect x={`${preview.x1*100}%`} y={`${preview.y1*100}%`}
+              width={`${(preview.x2-preview.x1)*100}%`} height={`${(preview.y2-preview.y1)*100}%`}
+              fill={CORES_REGIAO[tipoSelecionado]+'44'} stroke={CORES_REGIAO[tipoSelecionado]}
+              strokeWidth="2" strokeDasharray="6,3" rx="4" />
           )}
         </svg>
 
@@ -249,17 +283,13 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             </span>
           )}
           {modoDesenho && (
-            <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-bold">
-              ✏️ {tipoSelecionado}
-            </span>
+            <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-bold">✏️ {tipoSelecionado}</span>
           )}
         </div>
 
         {!aoVivo && !modoDesenho && (
-          <button
-            onClick={iniciarAoVivo}
-            className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition group"
-          >
+          <button onClick={() => { setErro(null); setAoVivo(true) }}
+            className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition group">
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center group-hover:scale-110 transition">
               <span className="text-2xl ml-1">▶</span>
             </div>
@@ -267,6 +297,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         )}
       </div>
 
+      {/* Controles */}
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-white">{camera.nome}</h3>
@@ -277,43 +308,53 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 
         {erro && <p className="text-red-400 text-xs mb-3">⚠ {erro}</p>}
 
+        {/* Botões principais */}
         <div className="flex gap-2 mb-3">
           {aoVivo ? (
-            <button onClick={pararAoVivo} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-bold transition">
+            <button onClick={() => { setAoVivo(false); if (intervalRef.current) clearInterval(intervalRef.current) }}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-bold transition">
               ⏹ Parar
             </button>
           ) : (
-            <button onClick={iniciarAoVivo} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg font-bold transition">
+            <button onClick={() => { setErro(null); setAoVivo(true) }}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg font-bold transition">
               ▶ Ao Vivo
             </button>
           )}
-          <button onClick={atualizarSnapshot} className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition" title="Atualizar">
+          <button onClick={() => { const url = `${liveUrl(camera.id)}?t=${Date.now()}`; setBufA(url); setAtivo('A') }}
+            className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition" title="Atualizar">
             🔄
           </button>
           <button
-            onClick={() => { setModoDesenho(v => !v); setPreview(null) }}
-            className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${modoDesenho ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+            onClick={() => { setModoDesenho(v => !v); setPreview(null); setAbaAtiva(v => v === 'regioes' ? null : 'regioes') }}
+            className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'regioes' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+            title="Regiões de IA"
           >
             ✏️
           </button>
+          <button
+            onClick={() => setAbaAtiva(v => v === 'analiticos' ? null : 'analiticos')}
+            className={`relative text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'analiticos' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+            title="Analíticos"
+          >
+            🧠
+            <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              {ativos}
+            </span>
+          </button>
         </div>
 
-        {modoDesenho && (
+        {/* Painel Regiões */}
+        {abaAtiva === 'regioes' && (
           <div className="bg-gray-900 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-2 font-bold">REGIÕES DE IA — clique e arraste na imagem</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {TIPOS_REGIAO.map(tipo => (
-                <button
-                  key={tipo}
-                  onClick={() => setTipoSelecionado(tipo)}
+                <button key={tipo} onClick={() => setTipoSelecionado(tipo)}
                   className={`text-xs py-1.5 px-2 rounded-lg font-bold transition border-2 ${
                     tipoSelecionado === tipo ? 'text-white' : 'bg-gray-800 text-gray-400 border-gray-700'
                   }`}
-                  style={tipoSelecionado === tipo ? {
-                    backgroundColor: CORES_REGIAO[tipo] + 'CC',
-                    borderColor: CORES_REGIAO[tipo]
-                  } : {}}
-                >
+                  style={tipoSelecionado === tipo ? { backgroundColor: CORES_REGIAO[tipo]+'CC', borderColor: CORES_REGIAO[tipo] } : {}}>
                   {tipo.toUpperCase()}{regioes.find(r => r.tipo === tipo) ? ' ✓' : ''}
                 </button>
               ))}
@@ -328,6 +369,33 @@ function CameraPlayer({ camera }: { camera: Camera }) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Painel Analíticos */}
+        {abaAtiva === 'analiticos' && (
+          <div className="bg-gray-900 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-gray-400 text-xs font-bold">ANALÍTICOS DE IA</p>
+              {salvando && <span className="text-xs text-gray-500 animate-pulse">Salvando...</span>}
+            </div>
+            <div className="space-y-2">
+              {ANALITICOS_INFO.map(({ key, label, icon, cor }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{icon}</span>
+                    <span className="text-xs text-gray-300">{label}</span>
+                    {analiticos[key] && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
+                        style={{ backgroundColor: cor + '33', color: cor }}>
+                        ON
+                      </span>
+                    )}
+                  </div>
+                  <Toggle ativo={analiticos[key]} onChange={() => toggleAnalitico(key)} />
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
