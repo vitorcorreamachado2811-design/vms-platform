@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
+from typing import Optional
 from uuid import UUID
 import uuid
 import subprocess
@@ -20,12 +21,14 @@ processos_ffmpeg: dict[str, subprocess.Popen] = {}
 class CameraCreate(BaseModel):
     nome: str
     rtsp_url: str
+    http_url: Optional[str] = None
     empresa_id: UUID
 
 class CameraResponse(BaseModel):
     id: UUID
     nome: str
     rtsp_url: str
+    http_url: Optional[str] = None
     ativo: bool
     empresa_id: UUID
 
@@ -46,6 +49,7 @@ def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
         id=uuid.uuid4(),
         nome=camera.nome,
         rtsp_url=camera.rtsp_url,
+        http_url=camera.http_url,
         empresa_id=camera.empresa_id,
     )
     db.add(nova)
