@@ -190,22 +190,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
       >
-        {/* Stream MJPEG ao vivo */}
-        {aoVivo && usandoMjpeg ? (
-          <img
-            ref={imgRef}
-            src={mjpegUrl}
-            alt={camera.nome}
-            className="w-full h-full object-cover"
-            onLoad={() => setCarregando(false)}
-            onError={() => {
-              // Fallback para snapshot polling se MJPEG falhar
-              setUsandoMjpeg(false)
-              atualizarSnapshot()
-            }}
-            draggable={false}
-          />
-        ) : snapshot ? (
+        {/* Snapshot ao vivo */}
+        {snapshot ? (
           <img
             ref={imgRef}
             src={snapshot}
