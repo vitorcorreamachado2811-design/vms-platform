@@ -56,14 +56,22 @@ const ANALITICOS_INFO: { key: keyof Analiticos; label: string; icon: string; cor
   { key: 'habitos',        label: 'Hábitos',           icon: '📊', cor: '#F59E0B' },
 ]
 
+// Mapeamento: analítico → regiões que ele libera no lápis
+const ANALITICO_REGIOES: Partial<Record<keyof Analiticos, string[]>> = {
+  queda_leito:    ['cama'],
+  banheiro_tempo: ['banheiro'],
+  gesto_socorro:  ['quarto'],
+  habitos:        ['cozinha', 'quarto'],
+  linha_contagem: ['linha'],
+}
+
 const CORES_REGIAO: Record<string, string> = {
-  cama:     '#3B82F6',
+  cama:     '#EF4444',
   banheiro: '#8B5CF6',
   cozinha:  '#F59E0B',
   quarto:   '#10B981',
+  linha:    '#10B981',
 }
-
-const TIPOS_REGIAO = ['cama', 'banheiro', 'cozinha', 'quarto']
 
 function liveUrl(cameraId: string) {
   return `${SUPABASE_URL}/storage/v1/object/public/live-frames/live/${cameraId}.jpg`
@@ -105,11 +113,7 @@ function Toggle({ ativo, onChange }: { ativo: boolean; onChange: () => void }) {
         ativo ? 'bg-green-500' : 'bg-gray-600'
       }`}
     >
-      <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
-          ativo ? 'translate-x-4' : 'translate-x-1'
-        }`}
-      />
+      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${ativo ? 'translate-x-4' : 'translate-x-1'}`} />
     </button>
   )
 }
@@ -121,7 +125,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [ativo, setAtivo]             = useState<'A' | 'B'>('A')
   const [online, setOnline]           = useState(true)
   const [modoDesenho, setModoDesenho] = useState(false)
-  const [tipoSelecionado, setTipoSelecionado] = useState('quarto')
+  const [tipoSelecionado, setTipoSelecionado] = useState('')
   const [regioes, setRegioes]         = useState<Regiao[]>([])
   const [desenhando, setDesenhando]   = useState(false)
   const [inicio, setInicio]           = useState<{x: number, y: number} | null>(null)
@@ -142,7 +146,12 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       .then(r => r.json())
       .then(data => setRegioes(Array.isArray(data) ? data : []))
       .catch(() => {})
-    carregarAnaliticos(camera.id).then(setAnaliticos)
+    carregarAnaliticos(camera.id).then(a => {
+      setAnaliticos(a)
+      // Define o primeiro tipo disponível como selecionado
+      const tipos = getTiposLiberados(a)
+      if (tipos.length > 0) setTipoSelecionado(tipos[0])
+    })
   }, [camera.id])
 
   useEffect(() => {
@@ -167,12 +176,30 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [aoVivo, camera.id])
 
+  // Calcula quais tipos de região estão liberados com base nos analíticos ativos
+  function getTiposLiberados(a: Analiticos): string[] {
+    const tipos = new Set<string>()
+    for (const [key, regioesList] of Object.entries(ANALITICO_REGIOES)) {
+      if (a[key as keyof Analiticos]) {
+        regioesList?.forEach(r => tipos.add(r))
+      }
+    }
+    return Array.from(tipos)
+  }
+
+  const tiposLiberados = getTiposLiberados(analiticos)
+
   async function toggleAnalitico(key: keyof Analiticos) {
     const novo = { ...analiticos, [key]: !analiticos[key] }
     setAnaliticos(novo)
     setSalvando(true)
     await salvarAnaliticos(camera.id, novo)
     setSalvando(false)
+    // Atualiza tipo selecionado se o atual foi desativado
+    const tipos = getTiposLiberados(novo)
+    if (!tipos.includes(tipoSelecionado) && tipos.length > 0) {
+      setTipoSelecionado(tipos[0])
+    }
   }
 
   function coordsRelativas(e: React.MouseEvent) {
@@ -185,7 +212,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   }
 
   function onMouseDown(e: React.MouseEvent) {
-    if (!modoDesenho) return
+    if (!modoDesenho || !tipoSelecionado || tipoSelecionado === 'linha') return
     e.preventDefault()
     setDesenhando(true)
     setInicio(coordsRelativas(e))
@@ -238,10 +265,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden">
-      {/* Área de vídeo */}
       <div
         ref={containerRef}
-        className={`relative bg-black aspect-video select-none ${modoDesenho ? 'cursor-crosshair' : 'cursor-default'}`}
+        className={`relative bg-black aspect-video select-none ${modoDesenho && tipoSelecionado && tipoSelecionado !== 'linha' ? 'cursor-crosshair' : 'cursor-default'}`}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
       >
         <img src={bufA} alt={camera.nome} draggable={false}
@@ -261,16 +287,16 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           {regioes.map(r => (
             <rect key={r.tipo} x={`${r.x1*100}%`} y={`${r.y1*100}%`}
               width={`${(r.x2-r.x1)*100}%`} height={`${(r.y2-r.y1)*100}%`}
-              fill={CORES_REGIAO[r.tipo]+'33'} stroke={CORES_REGIAO[r.tipo]} strokeWidth="2" rx="4" />
+              fill={(CORES_REGIAO[r.tipo]||'#fff')+'33'} stroke={CORES_REGIAO[r.tipo]||'#fff'} strokeWidth="2" rx="4" />
           ))}
           {regioes.map(r => (
             <text key={r.tipo+'_label'} x={`${r.x1*100+1}%`} y={`${r.y1*100+5}%`}
-              fill={CORES_REGIAO[r.tipo]} fontSize="12" fontWeight="bold">{r.tipo.toUpperCase()}</text>
+              fill={CORES_REGIAO[r.tipo]||'#fff'} fontSize="12" fontWeight="bold">{r.tipo.toUpperCase()}</text>
           ))}
           {preview && (
             <rect x={`${preview.x1*100}%`} y={`${preview.y1*100}%`}
               width={`${(preview.x2-preview.x1)*100}%`} height={`${(preview.y2-preview.y1)*100}%`}
-              fill={CORES_REGIAO[tipoSelecionado]+'44'} stroke={CORES_REGIAO[tipoSelecionado]}
+              fill={(CORES_REGIAO[tipoSelecionado]||'#fff')+'44'} stroke={CORES_REGIAO[tipoSelecionado]||'#fff'}
               strokeWidth="2" strokeDasharray="6,3" rx="4" />
           )}
         </svg>
@@ -282,8 +308,11 @@ function CameraPlayer({ camera }: { camera: Camera }) {
               {online ? 'AO VIVO' : 'SEM SINAL'}
             </span>
           )}
-          {modoDesenho && (
-            <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-bold">✏️ {tipoSelecionado}</span>
+          {modoDesenho && tipoSelecionado && (
+            <span className="text-white text-xs px-2 py-1 rounded-full font-bold"
+              style={{ backgroundColor: (CORES_REGIAO[tipoSelecionado]||'#8B5CF6')+'CC' }}>
+              ✏️ {tipoSelecionado.toUpperCase()}
+            </span>
           )}
         </div>
 
@@ -297,7 +326,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
         )}
       </div>
 
-      {/* Controles */}
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-white">{camera.nome}</h3>
@@ -308,7 +336,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 
         {erro && <p className="text-red-400 text-xs mb-3">⚠ {erro}</p>}
 
-        {/* Botões principais */}
         <div className="flex gap-2 mb-3">
           {aoVivo ? (
             <button onClick={() => { setAoVivo(false); if (intervalRef.current) clearInterval(intervalRef.current) }}
@@ -325,13 +352,22 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition" title="Atualizar">
             🔄
           </button>
+
+          {/* Lápis — sempre visível */}
           <button
-            onClick={() => { setModoDesenho(v => !v); setPreview(null); setAbaAtiva(v => v === 'regioes' ? null : 'regioes') }}
+            onClick={() => {
+              const next = abaAtiva === 'regioes' ? null : 'regioes'
+              setAbaAtiva(next)
+              setModoDesenho(next === 'regioes')
+              setPreview(null)
+            }}
             className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'regioes' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
             title="Regiões de IA"
           >
             ✏️
           </button>
+
+          {/* Analíticos */}
           <button
             onClick={() => setAbaAtiva(v => v === 'analiticos' ? null : 'analiticos')}
             className={`relative text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'analiticos' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
@@ -344,30 +380,49 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </button>
         </div>
 
-        {/* Painel Regiões */}
+        {/* Painel Lápis — mostra só tipos liberados pelos analíticos ativos */}
         {abaAtiva === 'regioes' && (
           <div className="bg-gray-900 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-2 font-bold">REGIÕES DE IA — clique e arraste na imagem</p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {TIPOS_REGIAO.map(tipo => (
-                <button key={tipo} onClick={() => setTipoSelecionado(tipo)}
-                  className={`text-xs py-1.5 px-2 rounded-lg font-bold transition border-2 ${
-                    tipoSelecionado === tipo ? 'text-white' : 'bg-gray-800 text-gray-400 border-gray-700'
-                  }`}
-                  style={tipoSelecionado === tipo ? { backgroundColor: CORES_REGIAO[tipo]+'CC', borderColor: CORES_REGIAO[tipo] } : {}}>
-                  {tipo.toUpperCase()}{regioes.find(r => r.tipo === tipo) ? ' ✓' : ''}
-                </button>
-              ))}
-            </div>
-            {regioes.length > 0 && (
-              <div className="space-y-1">
-                {regioes.map(r => (
-                  <div key={r.tipo} className="flex items-center justify-between text-xs">
-                    <span style={{ color: CORES_REGIAO[r.tipo] }} className="font-bold">■ {r.tipo.toUpperCase()}</span>
-                    <button onClick={() => deletarRegiao(r.tipo)} className="text-red-400 hover:text-red-300 transition">🗑 remover</button>
+
+            {tiposLiberados.length === 0 ? (
+              <p className="text-yellow-500 text-xs">Ative ao menos um analítico com região no painel 🧠</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {tiposLiberados.filter(t => t !== 'linha').map(tipo => (
+                    <button key={tipo} onClick={() => setTipoSelecionado(tipo)}
+                      className={`text-xs py-1.5 px-2 rounded-lg font-bold transition border-2 ${
+                        tipoSelecionado === tipo ? 'text-white' : 'bg-gray-800 text-gray-400 border-gray-700'
+                      }`}
+                      style={tipoSelecionado === tipo ? {
+                        backgroundColor: (CORES_REGIAO[tipo]||'#fff')+'CC',
+                        borderColor: CORES_REGIAO[tipo]||'#fff'
+                      } : {}}>
+                      {tipo.toUpperCase()}{regioes.find(r => r.tipo === tipo) ? ' ✓' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Linha de contagem — se ativa, mostra info separada */}
+                {tiposLiberados.includes('linha') && (
+                  <div className="mb-2 p-2 rounded-lg border border-green-700 bg-green-900/20">
+                    <p className="text-green-400 text-xs font-bold">↔️ Linha de Contagem</p>
+                    <p className="text-gray-400 text-xs mt-0.5">Configure em <Link href="/contagem" className="underline text-green-400">Contagem</Link></p>
                   </div>
-                ))}
-              </div>
+                )}
+
+                {regioes.length > 0 && (
+                  <div className="space-y-1 mt-2">
+                    {regioes.filter(r => tiposLiberados.includes(r.tipo)).map(r => (
+                      <div key={r.tipo} className="flex items-center justify-between text-xs">
+                        <span style={{ color: CORES_REGIAO[r.tipo]||'#fff' }} className="font-bold">■ {r.tipo.toUpperCase()}</span>
+                        <button onClick={() => deletarRegiao(r.tipo)} className="text-red-400 hover:text-red-300 transition">🗑 remover</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -380,22 +435,27 @@ function CameraPlayer({ camera }: { camera: Camera }) {
               {salvando && <span className="text-xs text-gray-500 animate-pulse">Salvando...</span>}
             </div>
             <div className="space-y-2">
-              {ANALITICOS_INFO.map(({ key, label, icon, cor }) => (
-                <div key={key} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">{icon}</span>
-                    <span className="text-xs text-gray-300">{label}</span>
-                    {analiticos[key] && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
-                        style={{ backgroundColor: cor + '33', color: cor }}>
-                        ON
-                      </span>
-                    )}
+              {ANALITICOS_INFO.map(({ key, label, icon, cor }) => {
+                const temRegiao = !!ANALITICO_REGIOES[key]
+                return (
+                  <div key={key} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{icon}</span>
+                      <span className="text-xs text-gray-300">{label}</span>
+                      {analiticos[key] && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
+                          style={{ backgroundColor: cor + '33', color: cor }}>ON</span>
+                      )}
+                      {analiticos[key] && temRegiao && (
+                        <span className="text-xs text-gray-500">✏️</span>
+                      )}
+                    </div>
+                    <Toggle ativo={analiticos[key]} onChange={() => toggleAnalitico(key)} />
                   </div>
-                  <Toggle ativo={analiticos[key]} onChange={() => toggleAnalitico(key)} />
-                </div>
-              ))}
+                )
+              })}
             </div>
+            <p className="text-gray-600 text-xs mt-3">✏️ = possui região de IA configurável</p>
           </div>
         )}
       </div>
