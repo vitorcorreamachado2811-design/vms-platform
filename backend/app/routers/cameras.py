@@ -165,17 +165,16 @@ def parar_stream(camera_id: str):
             pass
         del processos_ffmpeg[camera_id]
 
-def _gerar_mjpeg(rtsp_url: str):
-    """Generator que produz frames MJPEG continuamente do RTSP."""
-    import subprocess as sp
+async def _gerar_mjpeg_async(rtsp_url: str):
+    """Async generator que produz frames MJPEG via asyncio subprocess."""
+    import asyncio
     SOI = b"\xff\xd8"
     EOI = b"\xff\xd9"
-    boundary = b"--frame"
 
     while True:
         proc = None
         try:
-            proc = sp.Popen([
+            proc = await asyncio.create_subprocess_exec(
                 "ffmpeg",
                 "-rtsp_transport", "tcp",
                 "-i", rtsp_url,
@@ -183,12 +182,14 @@ def _gerar_mjpeg(rtsp_url: str):
                 "-q:v", "5",
                 "-f", "image2pipe",
                 "-vcodec", "mjpeg",
-                "pipe:1"
-            ], stdout=sp.PIPE, stderr=sp.DEVNULL)
+                "pipe:1",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL
+            )
 
             buffer = b""
             while True:
-                chunk = proc.stdout.read(16384)
+                chunk = await proc.stdout.read(16384)
                 if not chunk:
                     break
                 buffer += chunk
@@ -207,11 +208,12 @@ def _gerar_mjpeg(rtsp_url: str):
 
                     if len(frame) > 1000:
                         yield (
-                            boundary + b"\r\n"
+                            b"--frame\r\n"
                             b"Content-Type: image/jpeg\r\n"
                             b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n" +
                             frame + b"\r\n"
                         )
+
         except Exception as e:
             print(f"[MJPEG] Erro: {e}", flush=True)
         finally:
@@ -220,17 +222,17 @@ def _gerar_mjpeg(rtsp_url: str):
                     proc.terminate()
                 except:
                     pass
-        time.sleep(2)
+        await asyncio.sleep(2)
 
 @router.get("/{camera_id}/stream/mjpeg")
-def stream_mjpeg(camera_id: UUID, db: Session = Depends(get_db)):
-    """Endpoint MJPEG — retorna stream contínuo de frames a 15fps."""
+async def stream_mjpeg(camera_id: UUID, db: Session = Depends(get_db)):
+    """Endpoint MJPEG async — stream contínuo de frames a 15fps sem bloquear."""
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
 
     return StreamingResponse(
-        _gerar_mjpeg(camera.rtsp_url),
+        _gerar_mjpeg_async(camera.rtsp_url),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
     )
