@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 const API          = 'https://vms-platform-production.up.railway.app'
 const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
-const LIVE_FPS = 20  // frames por segundo
+const LIVE_FPS     = 10  // frames por segundo
 
 interface Camera {
   id: string
