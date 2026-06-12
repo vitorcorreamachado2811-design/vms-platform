@@ -99,7 +99,31 @@ def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(nova)
     return nova
+class CameraUpdate(BaseModel):
+    nome: Optional[str] = None
+    rtsp_url: Optional[str] = None
+    http_url: Optional[str] = None
+    ativo: Optional[bool] = None
 
+
+@router.patch("/{camera_id}", response_model=CameraResponse)
+def editar_camera(camera_id: UUID, dados: CameraUpdate, db: Session = Depends(get_db)):
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+
+    if dados.nome is not None:
+        camera.nome = dados.nome
+    if dados.rtsp_url is not None:
+        camera.rtsp_url = dados.rtsp_url
+    if dados.http_url is not None:
+        camera.http_url = dados.http_url
+    if dados.ativo is not None:
+        camera.ativo = dados.ativo
+
+    db.commit()
+    db.refresh(camera)
+    return camera
 @router.get("/{camera_id}", response_model=CameraResponse)
 def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
