@@ -86,7 +86,7 @@ async function carregarAnaliticos(cameraId: string): Promise<Analiticos> {
     const data = await res.json()
     if (data && data[0]) {
       const { camera_id, updated_at, ...rest } = data[0]
-      return rest as Analiticos
+      return { ...ANALITICOS_DEFAULT, ...rest } as Analiticos
     }
   } catch {}
   return { ...ANALITICOS_DEFAULT }
@@ -133,6 +133,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   const [erro, setErro]               = useState<string | null>(null)
   const [abaAtiva, setAbaAtiva]       = useState<'regioes' | 'analiticos' | null>(null)
   const [analiticos, setAnaliticos]   = useState<Analiticos>({ ...ANALITICOS_DEFAULT })
+  const [carregouAnaliticos, setCarregouAnaliticos] = useState(false)
   const [salvando, setSalvando]       = useState(false)
 
   const intervalRef  = useRef<NodeJS.Timeout | null>(null)
@@ -148,9 +149,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
       .catch(() => {})
     carregarAnaliticos(camera.id).then(a => {
       setAnaliticos(a)
-      // Define o primeiro tipo disponível como selecionado
+      setCarregouAnaliticos(true)
       const tipos = getTiposLiberados(a)
-      if (tipos.length > 0) setTipoSelecionado(tipos[0])
+      if (tipos.length > 0) setTipoSelecionado(tipos.filter(t => t !== 'linha')[0] || '')
     })
   }, [camera.id])
 
@@ -188,6 +189,8 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   }
 
   const tiposLiberados = getTiposLiberados(analiticos)
+  // Regiões visíveis na tela = só as que pertencem a um analítico ativo
+  const regioesVisiveis = regioes.filter(r => tiposLiberados.includes(r.tipo))
 
   async function toggleAnalitico(key: keyof Analiticos) {
     const novo = { ...analiticos, [key]: !analiticos[key] }
@@ -195,10 +198,10 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     setSalvando(true)
     await salvarAnaliticos(camera.id, novo)
     setSalvando(false)
-    // Atualiza tipo selecionado se o atual foi desativado
     const tipos = getTiposLiberados(novo)
-    if (!tipos.includes(tipoSelecionado) && tipos.length > 0) {
-      setTipoSelecionado(tipos[0])
+    const tiposDesenho = tipos.filter(t => t !== 'linha')
+    if (!tiposDesenho.includes(tipoSelecionado)) {
+      setTipoSelecionado(tiposDesenho[0] || '')
     }
   }
 
@@ -283,17 +286,18 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </div>
         )}
 
+        {/* Só desenha regioes cujo analitico esta ativo */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
-          {regioes.map(r => (
+          {regioesVisiveis.map(r => (
             <rect key={r.tipo} x={`${r.x1*100}%`} y={`${r.y1*100}%`}
               width={`${(r.x2-r.x1)*100}%`} height={`${(r.y2-r.y1)*100}%`}
               fill={(CORES_REGIAO[r.tipo]||'#fff')+'33'} stroke={CORES_REGIAO[r.tipo]||'#fff'} strokeWidth="2" rx="4" />
           ))}
-          {regioes.map(r => (
+          {regioesVisiveis.map(r => (
             <text key={r.tipo+'_label'} x={`${r.x1*100+1}%`} y={`${r.y1*100+5}%`}
               fill={CORES_REGIAO[r.tipo]||'#fff'} fontSize="12" fontWeight="bold">{r.tipo.toUpperCase()}</text>
           ))}
-          {preview && (
+          {preview && modoDesenho && tipoSelecionado && tipoSelecionado !== 'linha' && (
             <rect x={`${preview.x1*100}%`} y={`${preview.y1*100}%`}
               width={`${(preview.x2-preview.x1)*100}%`} height={`${(preview.y2-preview.y1)*100}%`}
               fill={(CORES_REGIAO[tipoSelecionado]||'#fff')+'44'} stroke={CORES_REGIAO[tipoSelecionado]||'#fff'}
@@ -308,7 +312,7 @@ function CameraPlayer({ camera }: { camera: Camera }) {
               {online ? 'AO VIVO' : 'SEM SINAL'}
             </span>
           )}
-          {modoDesenho && tipoSelecionado && (
+          {modoDesenho && tipoSelecionado && tipoSelecionado !== 'linha' && (
             <span className="text-white text-xs px-2 py-1 rounded-full font-bold"
               style={{ backgroundColor: (CORES_REGIAO[tipoSelecionado]||'#8B5CF6')+'CC' }}>
               ✏️ {tipoSelecionado.toUpperCase()}
@@ -385,7 +389,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           <div className="bg-gray-900 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-2 font-bold">REGIÕES DE IA — clique e arraste na imagem</p>
 
-            {tiposLiberados.length === 0 ? (
+            {!carregouAnaliticos ? (
+              <p className="text-gray-500 text-xs">Carregando...</p>
+            ) : tiposLiberados.length === 0 ? (
               <p className="text-yellow-500 text-xs">Ative ao menos um analítico com região no painel 🧠</p>
             ) : (
               <>
@@ -412,9 +418,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
                   </div>
                 )}
 
-                {regioes.length > 0 && (
+                {regioesVisiveis.length > 0 && (
                   <div className="space-y-1 mt-2">
-                    {regioes.filter(r => tiposLiberados.includes(r.tipo)).map(r => (
+                    {regioesVisiveis.map(r => (
                       <div key={r.tipo} className="flex items-center justify-between text-xs">
                         <span style={{ color: CORES_REGIAO[r.tipo]||'#fff' }} className="font-bold">■ {r.tipo.toUpperCase()}</span>
                         <button onClick={() => deletarRegiao(r.tipo)} className="text-red-400 hover:text-red-300 transition">🗑 remover</button>
