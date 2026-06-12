@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -18,6 +18,48 @@ interface Empresa {
   id: string
   nome: string
   email: string
+}
+
+const MARCAS: Record<string, {
+  label: string
+  template: (u:string,s:string,ip:string,porta:string,canal:string) => string
+  templateHttp?: (u:string,s:string,ip:string,portaHttp:string,canal:string) => string
+  portaPadrao: string
+  portaHttpPadrao?: string
+}> = {
+  intelbras: {
+    label: 'Intelbras',
+    template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
+    templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/snapshot.cgi?channel=${c}`,
+    portaPadrao: '554',
+    portaHttpPadrao: '80',
+  },
+  hikvision: {
+    label: 'Hikvision',
+    template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/Streaming/Channels/${c}01`,
+    templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/Streaming/channels/${c}01/httpPreview`,
+    portaPadrao: '554',
+    portaHttpPadrao: '80',
+  },
+  dahua: {
+    label: 'Dahua',
+    template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
+    templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/mjpg/video.cgi?channel=${c}&subtype=0`,
+    portaPadrao: '554',
+    portaHttpPadrao: '80',
+  },
+  axis: {
+    label: 'Axis',
+    template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/axis-media/media.amp?camera=${c}`,
+    templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/axis-cgi/mjpg/video.cgi?camera=${c}`,
+    portaPadrao: '554',
+    portaHttpPadrao: '80',
+  },
+  generico: {
+    label: 'Genérico (URL livre)',
+    template: () => '',
+    portaPadrao: '554',
+  },
 }
 
 function ModalConfirmar({
@@ -65,6 +107,207 @@ function ModalConfirmar({
   )
 }
 
+// ─────────────────────────────────────────────
+// MODAL DE EDIÇÃO DE CÂMERA
+// ─────────────────────────────────────────────
+function ModalEditar({
+  camera,
+  onSalvar,
+  onCancelar,
+  salvando,
+  erro,
+}: {
+  camera: Camera
+  onSalvar: (dados: { nome: string; rtsp_url: string; http_url: string; ativo: boolean }) => void
+  onCancelar: () => void
+  salvando: boolean
+  erro: string | null
+}) {
+  const [nome, setNome]       = useState(camera.nome)
+  const [rtspUrl, setRtspUrl] = useState(camera.rtsp_url)
+  const [httpUrl, setHttpUrl] = useState(camera.http_url || '')
+  const [ativo, setAtivo]     = useState(camera.ativo)
+
+  // Campos auxiliares para montar URL via marca
+  const [marca, setMarca]         = useState('')
+  const [camIp, setCamIp]         = useState('')
+  const [camPorta, setCamPorta]   = useState('')
+  const [camUsuario, setCamUsuario] = useState('admin')
+  const [camSenha, setCamSenha]   = useState('')
+  const [camCanal, setCamCanal]   = useState('1')
+  const [camPortaHttp, setCamPortaHttp] = useState('80')
+
+  function gerarUrl() {
+    if (!marca || marca === 'generico') return
+    const m = MARCAS[marca]
+    if (m && camIp) {
+      setRtspUrl(m.template(camUsuario, camSenha, camIp, camPorta || m.portaPadrao, camCanal))
+      if (m.templateHttp) {
+        setHttpUrl(m.templateHttp(camUsuario, camSenha, camIp, camPortaHttp || m.portaHttpPadrao || '80', camCanal))
+      }
+    }
+  }
+
+  function onMarcaChange(m: string) {
+    setMarca(m)
+    setCamPorta(MARCAS[m]?.portaPadrao || '554')
+    setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h2 className="text-xl font-bold text-white mb-4">✏️ Editar câmera</h2>
+
+        {erro && (
+          <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">
+            ⚠ {erro}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-gray-400 text-xs">Nome</label>
+            <input
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+            />
+          </div>
+
+          {/* Status ativo/inativo */}
+          <div className="flex items-center justify-between bg-gray-900 rounded-lg p-3">
+            <span className="text-gray-300 text-sm font-bold">Câmera ativa</span>
+            <button
+              onClick={() => setAtivo(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${ativo ? 'bg-green-500' : 'bg-gray-600'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${ativo ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {/* Helper: gerar URL via marca (opcional, caso tenha errado IP/porta/senha) */}
+          <div className="bg-gray-900 rounded-lg p-3 space-y-2">
+            <p className="text-gray-400 text-xs font-bold">Errou IP, porta ou senha? Gere a URL de novo:</p>
+            <select
+              className="w-full bg-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+              value={marca}
+              onChange={e => onMarcaChange(e.target.value)}
+            >
+              <option value="">Selecione a marca (opcional)</option>
+              {Object.entries(MARCAS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+
+            {marca && marca !== 'generico' && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                    placeholder="IP (ex: 192.168.1.100)"
+                    value={camIp}
+                    onChange={e => { setCamIp(e.target.value); setTimeout(gerarUrl, 0) }}
+                    onBlur={gerarUrl}
+                  />
+                  <input
+                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                    placeholder="Porta RTSP"
+                    value={camPorta}
+                    onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }}
+                    onBlur={gerarUrl}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                    placeholder="Usuário"
+                    value={camUsuario}
+                    onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }}
+                    onBlur={gerarUrl}
+                  />
+                  <input
+                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                    placeholder="Senha"
+                    type="password"
+                    value={camSenha}
+                    onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }}
+                    onBlur={gerarUrl}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                    placeholder="Canal (ex: 1)"
+                    value={camCanal}
+                    onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }}
+                    onBlur={gerarUrl}
+                  />
+                  {MARCAS[marca]?.templateHttp && (
+                    <input
+                      className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
+                      placeholder="Porta HTTP"
+                      value={camPortaHttp}
+                      onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }}
+                      onBlur={gerarUrl}
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={gerarUrl}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded-lg transition"
+                >
+                  🔄 Gerar URLs com esses dados
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* URLs finais — sempre editáveis manualmente */}
+          <div>
+            <label className="text-gray-400 text-xs">URL RTSP</label>
+            <input
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
+              value={rtspUrl}
+              onChange={e => setRtspUrl(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs">URL HTTP (snapshot, opcional)</label>
+            <input
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
+              value={httpUrl}
+              onChange={e => setHttpUrl(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-5">
+          <button
+            onClick={onCancelar}
+            disabled={salvando}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => onSalvar({ nome, rtsp_url: rtspUrl, http_url: httpUrl, ativo })}
+            disabled={salvando || !nome || !rtspUrl}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
+          >
+            {salvando ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Salvando...
+              </>
+            ) : '💾 Salvar alterações'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { usuario, carregando: authCarregando, logout } = useAuth()
   const [cameras, setCameras] = useState<Camera[]>([])
@@ -86,6 +329,9 @@ export default function Dashboard() {
   const [emailEmpresa, setEmailEmpresa] = useState('')
   const [aba, setAba] = useState('cameras')
   const [cameraParaDeletar, setCameraParaDeletar] = useState<Camera | null>(null)
+  const [cameraParaEditar, setCameraParaEditar] = useState<Camera | null>(null)
+  const [editando, setEditando] = useState(false)
+  const [erroEdicao, setErroEdicao] = useState<string | null>(null)
   const [deletando, setDeletando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [criando, setCriando] = useState(false)
@@ -137,48 +383,6 @@ export default function Dashboard() {
       setCameras([])
       setEmpresas([])
     }
-  }
-
-  const MARCAS: Record<string, {
-    label: string
-    template: (u:string,s:string,ip:string,porta:string,canal:string) => string
-    templateHttp?: (u:string,s:string,ip:string,portaHttp:string,canal:string) => string
-    portaPadrao: string
-    portaHttpPadrao?: string
-  }> = {
-    intelbras: {
-      label: 'Intelbras',
-      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
-      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/snapshot.cgi?channel=${c}`,
-      portaPadrao: '554',
-      portaHttpPadrao: '80',
-    },
-    hikvision: {
-      label: 'Hikvision',
-      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/Streaming/Channels/${c}01`,
-      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/Streaming/channels/${c}01/httpPreview`,
-      portaPadrao: '554',
-      portaHttpPadrao: '80',
-    },
-    dahua: {
-      label: 'Dahua',
-      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
-      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/mjpg/video.cgi?channel=${c}&subtype=0`,
-      portaPadrao: '554',
-      portaHttpPadrao: '80',
-    },
-    axis: {
-      label: 'Axis',
-      template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/axis-media/media.amp?camera=${c}`,
-      templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/axis-cgi/mjpg/video.cgi?camera=${c}`,
-      portaPadrao: '554',
-      portaHttpPadrao: '80',
-    },
-    generico: {
-      label: 'Genérico (URL livre)',
-      template: () => '',
-      portaPadrao: '554',
-    },
   }
 
   function gerarUrl() {
@@ -245,7 +449,7 @@ export default function Dashboard() {
     setErro(null)
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 8000) // timeout 8s
+      const timeout = setTimeout(() => controller.abort(), 8000)
       const res = await fetch(`${API}/cameras/remover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -254,7 +458,6 @@ export default function Dashboard() {
       })
       clearTimeout(timeout)
       if (!res.ok) throw new Error('Erro ao deletar')
-      // Remove da lista imediatamente sem precisar recarregar
       setCameras(prev => prev.filter(c => c.id !== camera.id))
       setCameraParaDeletar(null)
     } catch (e: any) {
@@ -262,6 +465,37 @@ export default function Dashboard() {
       setCameraParaDeletar(null)
     } finally {
       setDeletando(false)
+    }
+  }
+
+  // ── EDITAR CÂMERA ────────────────────────────────
+  async function editarCamera(dados: { nome: string; rtsp_url: string; http_url: string; ativo: boolean }) {
+    if (!cameraParaEditar) return
+    setEditando(true)
+    setErroEdicao(null)
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10000)
+      const res = await fetch(`${API}/cameras/${cameraParaEditar.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: dados.nome,
+          rtsp_url: dados.rtsp_url,
+          http_url: dados.http_url || null,
+          ativo: dados.ativo,
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      if (!res.ok) throw new Error('Erro ao editar câmera')
+      const atualizada = await res.json()
+      setCameras(prev => prev.map(c => c.id === atualizada.id ? atualizada : c))
+      setCameraParaEditar(null)
+    } catch (e: any) {
+      setErroEdicao(e.name === 'AbortError' ? 'Timeout — tente novamente' : 'Erro ao editar câmera')
+    } finally {
+      setEditando(false)
     }
   }
 
@@ -283,6 +517,16 @@ export default function Dashboard() {
             onConfirmar={() => deletarCamera(cameraParaDeletar)}
             onCancelar={() => !deletando && setCameraParaDeletar(null)}
             deletando={deletando}
+          />
+        )}
+
+        {cameraParaEditar && (
+          <ModalEditar
+            camera={cameraParaEditar}
+            onSalvar={editarCamera}
+            onCancelar={() => !editando && (setCameraParaEditar(null), setErroEdicao(null))}
+            salvando={editando}
+            erro={erroEdicao}
           />
         )}
 
@@ -507,6 +751,13 @@ export default function Dashboard() {
                           <span className={`text-xs px-2 py-1 rounded-full ${c.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
                             {c.ativo ? 'Ativa' : 'Inativa'}
                           </span>
+                          <button
+                            onClick={() => setCameraParaEditar(c)}
+                            className="text-gray-400 hover:text-blue-400 transition text-lg"
+                            title="Editar câmera"
+                          >
+                            ✏️
+                          </button>
                           <button
                             onClick={() => setCameraParaDeletar(c)}
                             className="text-gray-400 hover:text-red-400 transition text-lg"
