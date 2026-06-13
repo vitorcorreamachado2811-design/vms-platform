@@ -31,29 +31,25 @@ const MARCAS: Record<string, {
     label: 'Intelbras',
     template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
     templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/snapshot.cgi?channel=${c}`,
-    portaPadrao: '554',
-    portaHttpPadrao: '80',
+    portaPadrao: '554', portaHttpPadrao: '80',
   },
   hikvision: {
     label: 'Hikvision',
     template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/Streaming/Channels/${c}01`,
     templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/Streaming/channels/${c}01/httpPreview`,
-    portaPadrao: '554',
-    portaHttpPadrao: '80',
+    portaPadrao: '554', portaHttpPadrao: '80',
   },
   dahua: {
     label: 'Dahua',
     template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/cam/realmonitor?channel=${c}&subtype=0`,
     templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/cgi-bin/mjpg/video.cgi?channel=${c}&subtype=0`,
-    portaPadrao: '554',
-    portaHttpPadrao: '80',
+    portaPadrao: '554', portaHttpPadrao: '80',
   },
   axis: {
     label: 'Axis',
     template: (u,s,ip,p,c) => `rtsp://${u}:${s}@${ip}:${p}/axis-media/media.amp?camera=${c}`,
     templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/axis-cgi/mjpg/video.cgi?camera=${c}`,
-    portaPadrao: '554',
-    portaHttpPadrao: '80',
+    portaPadrao: '554', portaHttpPadrao: '80',
   },
   generico: {
     label: 'Genérico (URL livre)',
@@ -62,16 +58,8 @@ const MARCAS: Record<string, {
   },
 }
 
-function ModalConfirmar({
-  nome,
-  onConfirmar,
-  onCancelar,
-  deletando,
-}: {
-  nome: string
-  onConfirmar: () => void
-  onCancelar: () => void
-  deletando: boolean
+function ModalConfirmar({ nome, onConfirmar, onCancelar, deletando }: {
+  nome: string; onConfirmar: () => void; onCancelar: () => void; deletando: boolean
 }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -82,24 +70,13 @@ function ModalConfirmar({
           Tem certeza que deseja deletar <span className="text-white font-bold">"{nome}"</span>? Esta ação não pode ser desfeita.
         </p>
         <div className="flex gap-3">
-          <button
-            onClick={onCancelar}
-            disabled={deletando}
-            className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition"
-          >
+          <button onClick={onCancelar} disabled={deletando}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition">
             Cancelar
           </button>
-          <button
-            onClick={onConfirmar}
-            disabled={deletando}
-            className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
-          >
-            {deletando ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Deletando...
-              </>
-            ) : 'Deletar'}
+          <button onClick={onConfirmar} disabled={deletando}
+            className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2">
+            {deletando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Deletando...</> : 'Deletar'}
           </button>
         </div>
       </div>
@@ -107,31 +84,18 @@ function ModalConfirmar({
   )
 }
 
-// ─────────────────────────────────────────────
-// MODAL DE EDIÇÃO DE CÂMERA
-// ─────────────────────────────────────────────
-function ModalEditar({
-  camera,
-  onSalvar,
-  onCancelar,
-  salvando,
-  erro,
-}: {
+function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
   camera: Camera
   onSalvar: (dados: { nome: string; rtsp_url: string; http_url: string; ativo: boolean }) => void
-  onCancelar: () => void
-  salvando: boolean
-  erro: string | null
+  onCancelar: () => void; salvando: boolean; erro: string | null
 }) {
   const [nome, setNome]       = useState(camera.nome)
   const [rtspUrl, setRtspUrl] = useState(camera.rtsp_url)
   const [httpUrl, setHttpUrl] = useState(camera.http_url || '')
   const [ativo, setAtivo]     = useState(camera.ativo)
-
-  // Campos auxiliares para montar URL via marca
-  const [marca, setMarca]         = useState('')
-  const [camIp, setCamIp]         = useState('')
-  const [camPorta, setCamPorta]   = useState('')
+  const [marca, setMarca]     = useState('')
+  const [camIp, setCamIp]     = useState('')
+  const [camPorta, setCamPorta] = useState('')
   const [camUsuario, setCamUsuario] = useState('admin')
   const [camSenha, setCamSenha]   = useState('')
   const [camCanal, setCamCanal]   = useState('1')
@@ -142,165 +106,66 @@ function ModalEditar({
     const m = MARCAS[marca]
     if (m && camIp) {
       setRtspUrl(m.template(camUsuario, camSenha, camIp, camPorta || m.portaPadrao, camCanal))
-      if (m.templateHttp) {
-        setHttpUrl(m.templateHttp(camUsuario, camSenha, camIp, camPortaHttp || m.portaHttpPadrao || '80', camCanal))
-      }
+      if (m.templateHttp) setHttpUrl(m.templateHttp(camUsuario, camSenha, camIp, camPortaHttp || m.portaHttpPadrao || '80', camCanal))
     }
-  }
-
-  function onMarcaChange(m: string) {
-    setMarca(m)
-    setCamPorta(MARCAS[m]?.portaPadrao || '554')
-    setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80')
   }
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold text-white mb-4">✏️ Editar câmera</h2>
-
-        {erro && (
-          <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">
-            ⚠ {erro}
-          </div>
-        )}
-
+        {erro && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">⚠ {erro}</div>}
         <div className="space-y-3">
           <div>
             <label className="text-gray-400 text-xs">Nome</label>
-            <input
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-              value={nome}
-              onChange={e => setNome(e.target.value)}
-            />
+            <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={nome} onChange={e => setNome(e.target.value)} />
           </div>
-
-          {/* Status ativo/inativo */}
           <div className="flex items-center justify-between bg-gray-900 rounded-lg p-3">
             <span className="text-gray-300 text-sm font-bold">Câmera ativa</span>
-            <button
-              onClick={() => setAtivo(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${ativo ? 'bg-green-500' : 'bg-gray-600'}`}
-            >
+            <button onClick={() => setAtivo(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${ativo ? 'bg-green-500' : 'bg-gray-600'}`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${ativo ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
-
-          {/* Helper: gerar URL via marca (opcional, caso tenha errado IP/porta/senha) */}
           <div className="bg-gray-900 rounded-lg p-3 space-y-2">
-            <p className="text-gray-400 text-xs font-bold">Errou IP, porta ou senha? Gere a URL de novo:</p>
-            <select
-              className="w-full bg-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              value={marca}
-              onChange={e => onMarcaChange(e.target.value)}
-            >
-              <option value="">Selecione a marca (opcional)</option>
-              {Object.entries(MARCAS).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
+            <p className="text-gray-400 text-xs font-bold">Gerar URL de novo (opcional):</p>
+            <select className="w-full bg-gray-700 rounded-lg px-3 py-2 text-white text-sm" value={marca}
+              onChange={e => { setMarca(e.target.value); setCamPorta(MARCAS[e.target.value]?.portaPadrao || '554'); setCamPortaHttp(MARCAS[e.target.value]?.portaHttpPadrao || '80') }}>
+              <option value="">Selecione a marca</option>
+              {Object.entries(MARCAS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
-
             {marca && marca !== 'generico' && (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                    placeholder="IP (ex: 192.168.1.100)"
-                    value={camIp}
-                    onChange={e => { setCamIp(e.target.value); setTimeout(gerarUrl, 0) }}
-                    onBlur={gerarUrl}
-                  />
-                  <input
-                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                    placeholder="Porta RTSP"
-                    value={camPorta}
-                    onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }}
-                    onBlur={gerarUrl}
-                  />
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="IP" value={camIp} onChange={e => { setCamIp(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta RTSP" value={camPorta} onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                    placeholder="Usuário"
-                    value={camUsuario}
-                    onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }}
-                    onBlur={gerarUrl}
-                  />
-                  <input
-                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                    placeholder="Senha"
-                    type="password"
-                    value={camSenha}
-                    onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }}
-                    onBlur={gerarUrl}
-                  />
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuário" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Senha" type="password" value={camSenha} onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                    placeholder="Canal (ex: 1)"
-                    value={camCanal}
-                    onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }}
-                    onBlur={gerarUrl}
-                  />
-                  {MARCAS[marca]?.templateHttp && (
-                    <input
-                      className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                      placeholder="Porta HTTP"
-                      value={camPortaHttp}
-                      onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }}
-                      onBlur={gerarUrl}
-                    />
-                  )}
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Canal" value={camCanal} onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                  {MARCAS[marca]?.templateHttp && <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta HTTP" value={camPortaHttp} onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />}
                 </div>
-                <button
-                  onClick={gerarUrl}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded-lg transition"
-                >
-                  🔄 Gerar URLs com esses dados
-                </button>
+                <button onClick={gerarUrl} className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded-lg transition">🔄 Gerar URLs</button>
               </>
             )}
           </div>
-
-          {/* URLs finais — sempre editáveis manualmente */}
           <div>
             <label className="text-gray-400 text-xs">URL RTSP</label>
-            <input
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
-              value={rtspUrl}
-              onChange={e => setRtspUrl(e.target.value)}
-            />
+            <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white text-sm font-mono" value={rtspUrl} onChange={e => setRtspUrl(e.target.value)} />
           </div>
           <div>
-            <label className="text-gray-400 text-xs">URL HTTP (snapshot, opcional)</label>
-            <input
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
-              value={httpUrl}
-              onChange={e => setHttpUrl(e.target.value)}
-            />
+            <label className="text-gray-400 text-xs">URL HTTP (opcional)</label>
+            <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white text-sm font-mono" value={httpUrl} onChange={e => setHttpUrl(e.target.value)} />
           </div>
         </div>
-
         <div className="flex gap-3 mt-5">
-          <button
-            onClick={onCancelar}
-            disabled={salvando}
-            className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={() => onSalvar({ nome, rtsp_url: rtspUrl, http_url: httpUrl, ativo })}
-            disabled={salvando || !nome || !rtspUrl}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
-          >
-            {salvando ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Salvando...
-              </>
-            ) : '💾 Salvar alterações'}
+          <button onClick={onCancelar} disabled={salvando} className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition">Cancelar</button>
+          <button onClick={() => onSalvar({ nome, rtsp_url: rtspUrl, http_url: httpUrl, ativo })} disabled={salvando || !nome || !rtspUrl}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2">
+            {salvando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : '💾 Salvar'}
           </button>
         </div>
       </div>
@@ -308,8 +173,16 @@ function ModalEditar({
   )
 }
 
+// Badge de perfil
+const PERFIL_COR: Record<string, string> = {
+  admin: 'bg-red-900 text-red-300',
+  gestor: 'bg-blue-900 text-blue-300',
+  cuidador: 'bg-green-900 text-green-300',
+  familiar: 'bg-purple-900 text-purple-300',
+}
+
 export default function Dashboard() {
-  const { usuario, carregando: authCarregando, logout } = useAuth()
+  const { usuario, carregando: authCarregando, logout, pode, perfil } = useAuth()
   const [cameras, setCameras] = useState<Camera[]>([])
   const [temposBanheiro, setTemposBanheiro] = useState<Record<string, number>>({})
   const [salvandoTempo, setSalvandoTempo] = useState<string | null>(null)
@@ -337,8 +210,8 @@ export default function Dashboard() {
   const [criando, setCriando] = useState(false)
 
   useEffect(() => {
-    if (!authCarregando) carregarDados()
-  }, [authCarregando])
+    if (!authCarregando && usuario) carregarDados()
+  }, [authCarregando, usuario])
 
   async function carregarTemposBanheiro(cameras: Camera[]) {
     const novos: Record<string, number> = {}
@@ -380,8 +253,7 @@ export default function Dashboard() {
       setEmpresas(Array.isArray(e) ? e : [])
       carregarTemposBanheiro(cams)
     } catch {
-      setCameras([])
-      setEmpresas([])
+      setCameras([]); setEmpresas([])
     }
   }
 
@@ -390,9 +262,7 @@ export default function Dashboard() {
     const m = MARCAS[marca]
     if (m && camIp) {
       setRtspUrl(m.template(camUsuario, camSenha, camIp, camPorta || m.portaPadrao, camCanal))
-      if (m.templateHttp) {
-        setHttpUrl(m.templateHttp(camUsuario, camSenha, camIp, camPortaHttp || m.portaHttpPadrao || '80', camCanal))
-      }
+      if (m.templateHttp) setHttpUrl(m.templateHttp(camUsuario, camSenha, camIp, camPortaHttp || m.portaHttpPadrao || '80', camCanal))
     }
   }
 
@@ -400,14 +270,12 @@ export default function Dashboard() {
     setMarca(m)
     setCamPorta(MARCAS[m]?.portaPadrao || '554')
     setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80')
-    setRtspUrl('')
-    setHttpUrl('')
+    setRtspUrl(''); setHttpUrl('')
   }
 
   async function criarCamera() {
     if (!nomeCamera || !rtspUrl || !empresaId) return
-    setCriando(true)
-    setErro(null)
+    setCriando(true); setErro(null)
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 10000)
@@ -423,9 +291,7 @@ export default function Dashboard() {
       await carregarDados()
     } catch (e: any) {
       setErro(e.name === 'AbortError' ? 'Timeout — tente novamente' : 'Erro ao cadastrar câmera')
-    } finally {
-      setCriando(false)
-    }
+    } finally { setCriando(false) }
   }
 
   async function criarEmpresa() {
@@ -439,14 +305,11 @@ export default function Dashboard() {
       })
       setNomeEmpresa(''); setEmailEmpresa('')
       await carregarDados()
-    } catch {
-      setErro('Erro ao cadastrar empresa')
-    }
+    } catch { setErro('Erro ao cadastrar empresa') }
   }
 
   async function deletarCamera(camera: Camera) {
-    setDeletando(true)
-    setErro(null)
+    setDeletando(true); setErro(null)
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 8000)
@@ -463,28 +326,19 @@ export default function Dashboard() {
     } catch (e: any) {
       setErro(e.name === 'AbortError' ? 'Timeout ao deletar — tente novamente' : 'Erro ao deletar câmera')
       setCameraParaDeletar(null)
-    } finally {
-      setDeletando(false)
-    }
+    } finally { setDeletando(false) }
   }
 
-  // ── EDITAR CÂMERA ────────────────────────────────
   async function editarCamera(dados: { nome: string; rtsp_url: string; http_url: string; ativo: boolean }) {
     if (!cameraParaEditar) return
-    setEditando(true)
-    setErroEdicao(null)
+    setEditando(true); setErroEdicao(null)
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 10000)
       const res = await fetch(`${API}/cameras/${cameraParaEditar.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome: dados.nome,
-          rtsp_url: dados.rtsp_url,
-          http_url: dados.http_url || null,
-          ativo: dados.ativo,
-        }),
+        body: JSON.stringify({ nome: dados.nome, rtsp_url: dados.rtsp_url, http_url: dados.http_url || null, ativo: dados.ativo }),
         signal: controller.signal,
       })
       clearTimeout(timeout)
@@ -494,9 +348,7 @@ export default function Dashboard() {
       setCameraParaEditar(null)
     } catch (e: any) {
       setErroEdicao(e.name === 'AbortError' ? 'Timeout — tente novamente' : 'Erro ao editar câmera')
-    } finally {
-      setEditando(false)
-    }
+    } finally { setEditando(false) }
   }
 
   if (authCarregando) {
@@ -512,22 +364,16 @@ export default function Dashboard() {
       <div className="max-w-6xl mx-auto">
 
         {cameraParaDeletar && (
-          <ModalConfirmar
-            nome={cameraParaDeletar.nome}
+          <ModalConfirmar nome={cameraParaDeletar.nome}
             onConfirmar={() => deletarCamera(cameraParaDeletar)}
             onCancelar={() => !deletando && setCameraParaDeletar(null)}
-            deletando={deletando}
-          />
+            deletando={deletando} />
         )}
-
         {cameraParaEditar && (
-          <ModalEditar
-            camera={cameraParaEditar}
+          <ModalEditar camera={cameraParaEditar}
             onSalvar={editarCamera}
             onCancelar={() => !editando && (setCameraParaEditar(null), setErroEdicao(null))}
-            salvando={editando}
-            erro={erroEdicao}
-          />
+            salvando={editando} erro={erroEdicao} />
         )}
 
         {/* Header */}
@@ -538,33 +384,22 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {usuario && (
-              <span className="text-gray-400 text-sm hidden md:block">👤 {usuario.nome}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 text-sm hidden md:block">👤 {usuario.nome}</span>
+                <span className={`text-xs px-2 py-1 rounded-full font-bold ${PERFIL_COR[perfil] || 'bg-gray-700 text-gray-300'}`}>
+                  {perfil.toUpperCase()}
+                </span>
+              </div>
             )}
-            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">
-              📷 Ao Vivo
-            </Link>
-            <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">
-              📊 Contagem
-            </Link>
-            <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">
-              🌡️ Heatmap
-            </Link>
-            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">
-              ⚡ Eventos
-            </Link>
-            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">
-              🏃 Hábitos
-            </Link>
-            <button
-              onClick={logout}
-              className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded-lg font-bold transition text-red-300 text-sm"
-            >
-              Sair
-            </button>
+            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">📷 Ao Vivo</Link>
+            {pode.verContagem && <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">📊 Contagem</Link>}
+            {pode.verHeatmap && <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">🌡️ Heatmap</Link>}
+            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">⚡ Eventos</Link>
+            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">🏃 Hábitos</Link>
+            <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded-lg font-bold transition text-red-300 text-sm">Sair</button>
           </div>
         </div>
 
-        {/* Erro global */}
         {erro && (
           <div className="bg-red-900/40 border border-red-500 rounded-xl p-4 mb-6 flex items-center justify-between">
             <span className="text-red-300">⚠️ {erro}</span>
@@ -588,155 +423,78 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Abas */}
+        {/* Abas — só admin vê aba Empresas */}
         <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setAba('cameras')}
-            className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}
-          >
+          <button onClick={() => setAba('cameras')}
+            className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}>
             Câmeras
           </button>
-          <button
-            onClick={() => setAba('empresas')}
-            className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'empresas' ? 'bg-green-600' : 'bg-gray-800 hover:bg-gray-700'}`}
-          >
-            Empresas
-          </button>
+          {pode.cadastrarEmpresa && (
+            <button onClick={() => setAba('empresas')}
+              className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'empresas' ? 'bg-green-600' : 'bg-gray-800 hover:bg-gray-700'}`}>
+              Empresas
+            </button>
+          )}
         </div>
 
         {/* Aba Cameras */}
         {aba === 'cameras' && (
-          <div className="grid grid-cols-2 gap-8">
-            <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Cadastrar Câmera</h2>
-              <div className="space-y-3">
-                <input
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-                  placeholder="Nome da câmera"
-                  value={nomeCamera}
-                  onChange={e => setNomeCamera(e.target.value)}
-                />
-
-                {/* Seletor de marca */}
-                <select
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
-                  value={marca}
-                  onChange={e => onMarcaChange(e.target.value)}
-                >
-                  <option value="">Selecione a marca</option>
-                  {Object.entries(MARCAS).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
-                </select>
-
-                {/* Campos específicos por marca */}
-                {marca && marca !== 'generico' && (
-                  <div className="bg-gray-900 rounded-lg p-3 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                        placeholder="IP (ex: 192.168.1.100)"
-                        value={camIp}
-                        onChange={e => { setCamIp(e.target.value); setTimeout(gerarUrl, 0) }}
-                        onBlur={gerarUrl}
-                      />
-                      <input
-                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                        placeholder="Porta"
-                        value={camPorta}
-                        onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }}
-                        onBlur={gerarUrl}
-                      />
+          <div className={`grid gap-8 ${pode.cadastrarCamera ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {/* Formulário — só admin */}
+            {pode.cadastrarCamera && (
+              <div className="bg-gray-800 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">Cadastrar Câmera</h2>
+                <div className="space-y-3">
+                  <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                    placeholder="Nome da câmera" value={nomeCamera} onChange={e => setNomeCamera(e.target.value)} />
+                  <select className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={marca} onChange={e => onMarcaChange(e.target.value)}>
+                    <option value="">Selecione a marca</option>
+                    {Object.entries(MARCAS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                  {marca && marca !== 'generico' && (
+                    <div className="bg-gray-900 rounded-lg p-3 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="IP" value={camIp} onChange={e => { setCamIp(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta" value={camPorta} onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuário" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Senha" type="password" value={camSenha} onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                      </div>
+                      <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm w-full" placeholder="Canal (ex: 1)" value={camCanal} onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                      {MARCAS[marca]?.templateHttp && (
+                        <div className="flex items-center gap-2">
+                          <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm flex-1" placeholder="Porta HTTP" value={camPortaHttp} onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                          <span className="text-gray-400 text-xs">porta HTTP ao vivo</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                        placeholder="Usuário"
-                        value={camUsuario}
-                        onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }}
-                        onBlur={gerarUrl}
-                      />
-                      <input
-                        className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm"
-                        placeholder="Senha"
-                        type="password"
-                        value={camSenha}
-                        onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }}
-                        onBlur={gerarUrl}
-                      />
-                    </div>
-                    <input
-                      className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm w-full"
-                      placeholder="Canal (ex: 1)"
-                      value={camCanal}
-                      onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }}
-                      onBlur={gerarUrl}
-                    />
-                    {MARCAS[marca]?.templateHttp && (
-                      <div className="flex items-center gap-2">
-                        <input
-                          className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm flex-1"
-                          placeholder="Porta HTTP (ex: 80)"
-                          value={camPortaHttp}
-                          onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }}
-                          onBlur={gerarUrl}
-                        />
-                        <span className="text-gray-400 text-xs">porta HTTP ao vivo</span>
+                  )}
+                  <div>
+                    <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
+                      placeholder="URL RTSP" value={rtspUrl} onChange={e => setRtspUrl(e.target.value)} />
+                    {rtspUrl && <p className="text-green-400 text-xs mt-1 px-1">✓ URL RTSP pronta</p>}
+                    {httpUrl && (
+                      <div>
+                        <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono mt-2"
+                          placeholder="URL HTTP ao vivo" value={httpUrl} onChange={e => setHttpUrl(e.target.value)} />
+                        <p className="text-blue-400 text-xs mt-1 px-1">📹 URL HTTP ao vivo pronta</p>
                       </div>
                     )}
                   </div>
-                )}
-
-                {/* URL gerada ou livre */}
-                <div>
-                  <input
-                    className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
-                    placeholder="URL RTSP (gerada automaticamente ou cole aqui)"
-                    value={rtspUrl}
-                    onChange={e => setRtspUrl(e.target.value)}
-                  />
-                  {rtspUrl && (
-                    <p className="text-green-400 text-xs mt-1 px-1">✓ URL RTSP pronta</p>
-                  )}
-
-                {/* HTTP URL gerada */}
-                {httpUrl && (
-                  <div>
-                    <input
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono"
-                      placeholder="URL HTTP ao vivo (gerada automaticamente)"
-                      value={httpUrl}
-                      onChange={e => setHttpUrl(e.target.value)}
-                    />
-                    <p className="text-blue-400 text-xs mt-1 px-1">📹 URL HTTP ao vivo pronta</p>
-                  </div>
-                )}
+                  <select className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={empresaId} onChange={e => setEmpresaId(e.target.value)}>
+                    <option value="">Selecione a empresa</option>
+                    {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                  </select>
+                  <button onClick={criarCamera} disabled={criando || !nomeCamera || !rtspUrl || !empresaId}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2">
+                    {criando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Cadastrando...</> : '+ Cadastrar Câmera'}
+                  </button>
                 </div>
-                <select
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
-                  value={empresaId}
-                  onChange={e => setEmpresaId(e.target.value)}
-                >
-                  <option value="">Selecione a empresa</option>
-                  {empresas.map(e => (
-                    <option key={e.id} value={e.id}>{e.nome}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={criarCamera}
-                  disabled={criando || !nomeCamera || !rtspUrl || !empresaId}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2"
-                >
-                  {criando ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Cadastrando...
-                    </>
-                  ) : '+ Cadastrar Câmera'}
-                </button>
               </div>
-            </div>
+            )}
 
+            {/* Lista de câmeras */}
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-xl font-bold mb-4">Câmeras Cadastradas</h2>
               {cameras.length === 0 ? (
@@ -751,44 +509,31 @@ export default function Dashboard() {
                           <span className={`text-xs px-2 py-1 rounded-full ${c.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
                             {c.ativo ? 'Ativa' : 'Inativa'}
                           </span>
-                          <button
-                            onClick={() => setCameraParaEditar(c)}
-                            className="text-gray-400 hover:text-blue-400 transition text-lg"
-                            title="Editar câmera"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={() => setCameraParaDeletar(c)}
-                            className="text-gray-400 hover:text-red-400 transition text-lg"
-                            title="Deletar câmera"
-                          >
-                            🗑️
-                          </button>
+                          {pode.editarCamera && (
+                            <button onClick={() => setCameraParaEditar(c)}
+                              className="text-gray-400 hover:text-blue-400 transition text-lg" title="Editar câmera">✏️</button>
+                          )}
+                          {pode.deletarCamera && (
+                            <button onClick={() => setCameraParaDeletar(c)}
+                              className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar câmera">🗑️</button>
+                          )}
                         </div>
                       </div>
                       <p className="text-gray-400 text-sm mt-1 truncate">{c.rtsp_url}</p>
                       <p className="text-gray-500 text-xs mt-1 font-mono">{c.id}</p>
-                      {/* Tempo limite banheiro */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-gray-400 text-xs">🚿 Alerta banheiro:</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={120}
-                          value={temposBanheiro[c.id] ?? 30}
-                          onChange={e => setTemposBanheiro(prev => ({ ...prev, [c.id]: Number(e.target.value) }))}
-                          className="w-16 bg-gray-600 rounded px-2 py-1 text-white text-xs text-center"
-                        />
-                        <span className="text-gray-400 text-xs">min</span>
-                        <button
-                          onClick={() => salvarTempoBanheiro(c.id, temposBanheiro[c.id] ?? 30)}
-                          disabled={salvandoTempo === c.id}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-xs px-2 py-1 rounded transition"
-                        >
-                          {salvandoTempo === c.id ? '...' : 'Salvar'}
-                        </button>
-                      </div>
+                      {pode.editarCamera && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-gray-400 text-xs">🚿 Alerta banheiro:</span>
+                          <input type="number" min={1} max={120} value={temposBanheiro[c.id] ?? 30}
+                            onChange={e => setTemposBanheiro(prev => ({ ...prev, [c.id]: Number(e.target.value) }))}
+                            className="w-16 bg-gray-600 rounded px-2 py-1 text-white text-xs text-center" />
+                          <span className="text-gray-400 text-xs">min</span>
+                          <button onClick={() => salvarTempoBanheiro(c.id, temposBanheiro[c.id] ?? 30)} disabled={salvandoTempo === c.id}
+                            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-xs px-2 py-1 rounded transition">
+                            {salvandoTempo === c.id ? '...' : 'Salvar'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -797,33 +542,21 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Aba Empresas */}
-        {aba === 'empresas' && (
+        {/* Aba Empresas — só admin */}
+        {aba === 'empresas' && pode.cadastrarEmpresa && (
           <div className="grid grid-cols-2 gap-8">
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-xl font-bold mb-4">Cadastrar Empresa</h2>
               <div className="space-y-3">
-                <input
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-                  placeholder="Nome da empresa"
-                  value={nomeEmpresa}
-                  onChange={e => setNomeEmpresa(e.target.value)}
-                />
-                <input
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
-                  placeholder="Email da empresa"
-                  value={emailEmpresa}
-                  onChange={e => setEmailEmpresa(e.target.value)}
-                />
-                <button
-                  onClick={criarEmpresa}
-                  className="w-full bg-green-600 hover:bg-green-700 rounded-lg px-4 py-2 font-bold transition"
-                >
+                <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                  placeholder="Nome da empresa" value={nomeEmpresa} onChange={e => setNomeEmpresa(e.target.value)} />
+                <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400"
+                  placeholder="Email da empresa" value={emailEmpresa} onChange={e => setEmailEmpresa(e.target.value)} />
+                <button onClick={criarEmpresa} className="w-full bg-green-600 hover:bg-green-700 rounded-lg px-4 py-2 font-bold transition">
                   + Cadastrar Empresa
                 </button>
               </div>
             </div>
-
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-xl font-bold mb-4">Empresas Cadastradas</h2>
               {empresas.length === 0 ? (
