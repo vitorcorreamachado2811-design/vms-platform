@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useAuth } from '../hooks/useAuth'
 
 const API          = 'https://vms-platform-production.up.railway.app'
 const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
@@ -56,7 +57,6 @@ const ANALITICOS_INFO: { key: keyof Analiticos; label: string; icon: string; cor
   { key: 'habitos',        label: 'Hábitos',           icon: '📊', cor: '#F59E0B' },
 ]
 
-// Mapeamento: analítico → regiões que ele libera no lápis
 const ANALITICO_REGIOES: Partial<Record<keyof Analiticos, string[]>> = {
   queda_leito:    ['cama'],
   banheiro_tempo: ['banheiro'],
@@ -177,7 +177,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [aoVivo, camera.id])
 
-  // Calcula quais tipos de região estão liberados com base nos analíticos ativos
   function getTiposLiberados(a: Analiticos): string[] {
     const tipos = new Set<string>()
     for (const [key, regioesList] of Object.entries(ANALITICO_REGIOES)) {
@@ -189,7 +188,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
   }
 
   const tiposLiberados = getTiposLiberados(analiticos)
-  // Regiões visíveis na tela = só as que pertencem a um analítico ativo
   const regioesVisiveis = regioes.filter(r => tiposLiberados.includes(r.tipo))
 
   async function toggleAnalitico(key: keyof Analiticos) {
@@ -286,7 +284,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </div>
         )}
 
-        {/* Só desenha regioes cujo analitico esta ativo */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           {regioesVisiveis.map(r => (
             <rect key={r.tipo} x={`${r.x1*100}%`} y={`${r.y1*100}%`}
@@ -356,8 +353,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
             className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition" title="Atualizar">
             🔄
           </button>
-
-          {/* Lápis — sempre visível */}
           <button
             onClick={() => {
               const next = abaAtiva === 'regioes' ? null : 'regioes'
@@ -366,16 +361,12 @@ function CameraPlayer({ camera }: { camera: Camera }) {
               setPreview(null)
             }}
             className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'regioes' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-            title="Regiões de IA"
           >
             ✏️
           </button>
-
-          {/* Analíticos */}
           <button
             onClick={() => setAbaAtiva(v => v === 'analiticos' ? null : 'analiticos')}
             className={`relative text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'analiticos' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-            title="Analíticos"
           >
             🧠
             <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
@@ -384,11 +375,9 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </button>
         </div>
 
-        {/* Painel Lápis — mostra só tipos liberados pelos analíticos ativos */}
         {abaAtiva === 'regioes' && (
           <div className="bg-gray-900 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-2 font-bold">REGIÕES DE IA — clique e arraste na imagem</p>
-
             {!carregouAnaliticos ? (
               <p className="text-gray-500 text-xs">Carregando...</p>
             ) : tiposLiberados.length === 0 ? (
@@ -409,15 +398,12 @@ function CameraPlayer({ camera }: { camera: Camera }) {
                     </button>
                   ))}
                 </div>
-
-                {/* Linha de contagem — se ativa, mostra info separada */}
                 {tiposLiberados.includes('linha') && (
                   <div className="mb-2 p-2 rounded-lg border border-green-700 bg-green-900/20">
                     <p className="text-green-400 text-xs font-bold">↔️ Linha de Contagem</p>
                     <p className="text-gray-400 text-xs mt-0.5">Configure em <Link href="/contagem" className="underline text-green-400">Contagem</Link></p>
                   </div>
                 )}
-
                 {regioesVisiveis.length > 0 && (
                   <div className="space-y-1 mt-2">
                     {regioesVisiveis.map(r => (
@@ -433,7 +419,6 @@ function CameraPlayer({ camera }: { camera: Camera }) {
           </div>
         )}
 
-        {/* Painel Analíticos */}
         {abaAtiva === 'analiticos' && (
           <div className="bg-gray-900 rounded-lg p-3">
             <div className="flex items-center justify-between mb-3">
@@ -470,15 +455,17 @@ function CameraPlayer({ camera }: { camera: Camera }) {
 }
 
 export default function CamerasPage() {
+  const { usuario } = useAuth()
   const [cameras, setCameras]       = useState<Camera[]>([])
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/cameras/`)
+    if (!usuario) return
+    fetch(`${API}/cameras/?empresa_id=${usuario.empresa_id}`)
       .then(r => r.json())
       .then(data => { setCameras(Array.isArray(data) ? data : []); setCarregando(false) })
       .catch(() => setCarregando(false))
-  }, [])
+  }, [usuario])
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-8">
@@ -502,7 +489,7 @@ export default function CamerasPage() {
           <div className="text-center py-20 text-gray-500">
             <div className="text-5xl mb-4">📷</div>
             <p className="text-xl">Nenhuma câmera cadastrada</p>
-            <Link href="/configuracoes" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">+ Adicionar câmera</Link>
+            <Link href="/" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">+ Adicionar câmera</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

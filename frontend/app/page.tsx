@@ -372,7 +372,7 @@ export default function Dashboard() {
   async function carregarDados() {
     try {
       const [c, e] = await Promise.all([
-        fetch(`${API}/cameras/`).then(r => r.json()),
+        fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
         fetch(`${API}/empresas/`).then(r => r.json()),
       ])
       const cams = Array.isArray(c) ? c : []

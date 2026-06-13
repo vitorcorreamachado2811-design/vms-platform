@@ -43,8 +43,8 @@ export default function EventosPage() {
   async function carregarDados() {
     try {
       const [e, c] = await Promise.all([
-        fetch(`${API}/eventos/`).then(r => r.json()),
-        fetch(`${API}/cameras/`).then(r => r.json()),
+        fetch(`${API}/eventos/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
+        fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
       ])
       setEventos(Array.isArray(e) ? e : [])
       setCameras(Array.isArray(c) ? c : [])
