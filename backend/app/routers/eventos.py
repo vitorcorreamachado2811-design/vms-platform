@@ -52,8 +52,12 @@ def atualizar_evento(evento_id: UUID, body: EventoUpdate, db: Session = Depends(
     return evento
 
 @router.get("/", response_model=list[EventoResponse])
-def listar_eventos(db: Session = Depends(get_db)):
-    return db.query(Evento).order_by(Evento.criado_em.desc()).limit(50).all()
+def listar_eventos(empresa_id: Optional[str] = None, db: Session = Depends(get_db)):
+    from app.models.models import Camera
+    query = db.query(Evento).join(Evento.camera)
+    if empresa_id:
+        query = query.filter(Camera.empresa_id == empresa_id)
+    return query.order_by(Evento.criado_em.desc()).limit(50).all()
 
 @router.get("/camera/{camera_id}", response_model=list[EventoResponse])
 def eventos_por_camera(camera_id: UUID, db: Session = Depends(get_db)):

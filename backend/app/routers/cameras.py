@@ -79,8 +79,11 @@ def ping():
     return {"ok": True}
 
 @router.get("/", response_model=list[CameraResponse])
-def listar_cameras(db: Session = Depends(get_db)):
-    cameras = db.query(Camera).all()
+def listar_cameras(empresa_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Camera)
+    if empresa_id:
+        query = query.filter(Camera.empresa_id == empresa_id)
+    cameras = query.all()
     for c in cameras:
         if c.ativo and c.http_url:
             iniciar_http_cache(str(c.id), c.http_url)
