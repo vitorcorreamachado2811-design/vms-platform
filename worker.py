@@ -657,6 +657,22 @@ def buscar_configuracoes(camera_id):
         pass
     return linha, regioes
 
+
+def buscar_analiticos(camera_id: str) -> dict:
+    """Busca analíticos ativos da câmera no Supabase."""
+    try:
+        supabase = get_supabase()
+        res = supabase.table("camera_analiticos").select("*").eq("camera_id", camera_id).execute()
+        if res.data:
+            return res.data[0]
+    except Exception as e:
+        print(f"[ANALITICOS] Erro ao buscar {camera_id}: {e}", flush=True)
+    return {
+        "queda_leito": True, "queda_pe": True, "pessoa": True,
+        "banheiro_tempo": True, "gesto_socorro": True,
+        "linha_contagem": True, "habitos": True
+    }
+
 def iou(boxA, boxB):
     xA    = max(boxA[0], boxB[0])
     yA    = max(boxA[1], boxB[1])
@@ -696,6 +712,7 @@ def processar_camera(camera):
 
     presenca_regiao      = defaultdict(lambda: defaultdict(dict))
     sono_registrado_hoje = None
+    analiticos         = buscar_analiticos(camera_id)
 
     while True:
         try:
@@ -704,6 +721,7 @@ def processar_camera(camera):
 
             if agora - config_refresh > 30:
                 linha, regioes = buscar_configuracoes(camera_id)
+                analiticos = buscar_analiticos(camera_id)
                 config_refresh = agora
 
             hoje_str = agora_dt.date().isoformat()
@@ -783,14 +801,17 @@ def processar_camera(camera):
                     def pode_alertar(tipo):
                         return agora - cooldowns[tid][tipo] > COOLDOWN_SEGUNDOS
 
+                    def analitico_ativo(key):
+                        return analiticos.get(key, True)
+
                     # ── DETECÇÕES ──────────────────────────────────────
                     if estava_na_cama and not na_cama and horizontal:
-                        if pode_alertar("queda_leito"):
+                        if analitico_ativo("queda_leito") and pode_alertar("queda_leito"):
                             salvar_evento(camera_id, "queda_leito", det["conf"], nome, rtsp_url)
                             cooldowns[tid]["queda_leito"] = agora
 
                     elif not na_cama and horizontal and not estava_na_cama:
-                        if pode_alertar("queda_pe"):
+                        if analitico_ativo("queda_pe") and pode_alertar("queda_pe"):
                             salvar_evento(camera_id, "queda_pe", det["conf"], nome, rtsp_url)
                             cooldowns[tid]["queda_pe"] = agora
 
@@ -806,7 +827,7 @@ def processar_camera(camera):
                                 salvar_evento(camera_id, "saida", det["conf"], nome, rtsp_url)
 
                     if not horizontal and not na_cama:
-                        if pode_alertar("person"):
+                        if analitico_ativo("pessoa") and pode_alertar("person"):
                             salvar_evento(camera_id, "person", det["conf"], nome, rtsp_url)
                             cooldowns[tid]["person"] = agora
 
