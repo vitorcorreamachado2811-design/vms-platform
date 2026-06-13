@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from uuid import UUID
 import uuid
 import hashlib
-
 from app.database import get_db
 from app.models.models import Usuario, Empresa
 
@@ -24,7 +23,7 @@ class UsuarioResponse(BaseModel):
     nome: str
     email: str
     empresa_id: UUID
-
+    perfil: str = 'familiar'
     class Config:
         from_attributes = True
 
@@ -41,13 +40,13 @@ def registrar(dados: UsuarioCreate, db: Session = Depends(get_db)):
     existente = db.query(Usuario).filter(Usuario.email == dados.email).first()
     if existente:
         raise HTTPException(status_code=400, detail="Email já cadastrado")
-
     usuario = Usuario(
         id=uuid.uuid4(),
         nome=dados.nome,
         email=dados.email,
         senha_hash=hash_senha(dados.senha),
         empresa_id=dados.empresa_id,
+        perfil='familiar',
     )
     db.add(usuario)
     db.commit()
@@ -57,13 +56,9 @@ def registrar(dados: UsuarioCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=LoginResponse)
 def login(dados: LoginRequest, db: Session = Depends(get_db)):
     usuario = db.query(Usuario).filter(Usuario.email == dados.email).first()
-
     if not usuario or usuario.senha_hash != hash_senha(dados.senha):
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
-
-    # Token simples por enquanto (vamos melhorar depois com JWT)
     token = hashlib.sha256(f"{usuario.id}{usuario.email}".encode()).hexdigest()
-
     return LoginResponse(
         token=token,
         usuario=UsuarioResponse(
@@ -71,6 +66,7 @@ def login(dados: LoginRequest, db: Session = Depends(get_db)):
             nome=usuario.nome,
             email=usuario.email,
             empresa_id=usuario.empresa_id,
+            perfil=usuario.perfil or 'familiar',
         )
     )
 
