@@ -75,7 +75,7 @@ class HabitoRegistro(Base):
     tipo = Column(String, nullable=False)
     horario_evento = Column(DateTime, nullable=False)
     duracao_minutos = Column(Integer, nullable=True)
-    metadata = Column(Text, nullable=True)
+    meta = Column(Text, nullable=True)
 
 class HabitoPerfil(Base):
     __tablename__ = "habitos_perfil"
