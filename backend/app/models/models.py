@@ -103,3 +103,6 @@ class HabitoAlerta(Base):
     desvio_minutos = Column(Integer)
     status = Column(String, default='pendente')
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+
+# Aliases para compatibilidade com routers existentes
+RegiaoMonitorada = Regiao
