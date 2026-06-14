@@ -203,6 +203,10 @@ export default function Dashboard() {
   const [deletando, setDeletando]       = useState(false)
   const [erro, setErro]                 = useState<string | null>(null)
   const [criando, setCriando]           = useState(false)
+  const [empresaParaEditar, setEmpresaParaEditar] = useState<Empresa | null>(null)
+  const [editandoEmpresa, setEditandoEmpresa]     = useState(false)
+  const [nomeEmpresaEdit, setNomeEmpresaEdit]     = useState('')
+  const [emailEmpresaEdit, setEmailEmpresaEdit]   = useState('')
 
   // Novo usuário
   const [novoNome, setNovoNome]         = useState('')
@@ -305,6 +309,30 @@ export default function Dashboard() {
       setNomeEmpresa(''); setEmailEmpresa('')
       await carregarDados()
     } catch { setErro('Erro ao cadastrar empresa') }
+  }
+
+  async function deletarEmpresa(id: string) {
+    try {
+      await fetch(`${API}/empresas/${id}`, { method: 'DELETE' })
+      setEmpresas(prev => prev.filter(e => e.id !== id))
+    } catch { setErro('Erro ao deletar empresa') }
+  }
+
+  async function editarEmpresa() {
+    if (!empresaParaEditar || !nomeEmpresaEdit || !emailEmpresaEdit) return
+    setEditandoEmpresa(true)
+    try {
+      const res = await fetch(`${API}/empresas/${empresaParaEditar.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nomeEmpresaEdit, email: emailEmpresaEdit }),
+      })
+      if (!res.ok) throw new Error('Erro ao editar empresa')
+      const atualizada = await res.json()
+      setEmpresas(prev => prev.map(e => e.id === atualizada.id ? atualizada : e))
+      setEmpresaParaEditar(null)
+    } catch { setErro('Erro ao editar empresa') }
+    finally { setEditandoEmpresa(false) }
   }
 
   async function criarUsuario() {
@@ -534,8 +562,31 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   {empresas.map(e => (
                     <div key={e.id} className="bg-gray-700 rounded-lg p-3">
-                      <p className="font-bold">{e.nome}</p>
-                      <p className="text-gray-400 text-sm">{e.email}</p>
+                      {empresaParaEditar?.id === e.id ? (
+                        <div className="space-y-2">
+                          <input className="w-full bg-gray-600 rounded-lg px-3 py-1.5 text-white text-sm" value={nomeEmpresaEdit} onChange={ev => setNomeEmpresaEdit(ev.target.value)} />
+                          <input className="w-full bg-gray-600 rounded-lg px-3 py-1.5 text-white text-sm" value={emailEmpresaEdit} onChange={ev => setEmailEmpresaEdit(ev.target.value)} />
+                          <div className="flex gap-2">
+                            <button onClick={editarEmpresa} disabled={editandoEmpresa} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded-lg transition font-bold">
+                              {editandoEmpresa ? '...' : '💾 Salvar'}
+                            </button>
+                            <button onClick={() => setEmpresaParaEditar(null)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white text-xs py-1.5 rounded-lg transition">Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-bold">{e.nome}</p>
+                            <p className="text-gray-400 text-sm">{e.email}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setEmpresaParaEditar(e); setNomeEmpresaEdit(e.nome); setEmailEmpresaEdit(e.email) }}
+                              className="text-gray-400 hover:text-blue-400 transition text-lg" title="Editar">✏️</button>
+                            <button onClick={() => deletarEmpresa(e.id)}
+                              className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar">🗑️</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
