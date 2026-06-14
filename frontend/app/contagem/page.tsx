@@ -1,5 +1,4 @@
-ï»¿'use client'
-
+'use client'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
@@ -29,24 +28,23 @@ interface Contagem {
 export default function ContagemPage() {
   const { usuario, carregando: authCarregando, logout } = useAuth()
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const imgRef = useRef<HTMLImageElement>(null)
+  const imgRef    = useRef<HTMLImageElement>(null)
 
-  const [cameras, setCameras] = useState<Camera[]>([])
+  const [cameras, setCameras]                     = useState<Camera[]>([])
   const [cameraSelecionada, setCameraSelecionada] = useState<Camera | null>(null)
-  const [snapshot, setSnapshot] = useState<string | null>(null)
-  const [linha, setLinha] = useState<Linha | null>(null)
-  const [linhaSalva, setLinhaSalva] = useState<Linha | null>(null)
-  const [desenhando, setDesenhando] = useState(false)
-  const [pontoA, setPontoA] = useState<{ x: number; y: number } | null>(null)
-  const [contagem, setContagem] = useState<Contagem | null>(null)
-  const [salvando, setSalvando] = useState(false)
-  const [mensagem, setMensagem] = useState('')
+  const [snapshot, setSnapshot]                   = useState<string | null>(null)
+  const [linha, setLinha]                         = useState<Linha | null>(null)
+  const [linhaSalva, setLinhaSalva]               = useState<Linha | null>(null)
+  const [desenhando, setDesenhando]               = useState(false)
+  const [pontoA, setPontoA]                       = useState<{ x: number; y: number } | null>(null)
+  const [contagem, setContagem]                   = useState<Contagem | null>(null)
+  const [salvando, setSalvando]                   = useState(false)
+  const [mensagem, setMensagem]                   = useState('')
 
   useEffect(() => {
     if (!authCarregando) carregarCameras()
   }, [authCarregando])
 
-  // Auto-refresh contagem a cada 5s
   useEffect(() => {
     if (!cameraSelecionada) return
     const interval = setInterval(() => carregarContagem(cameraSelecionada.id), 5000)
@@ -64,11 +62,7 @@ export default function ContagemPage() {
     setPontoA(null)
     setSnapshot(null)
     setContagem(null)
-
-    // Carrega snapshot
     setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
-
-    // Carrega linha existente
     try {
       const res = await fetch(`${API}/contagem/${camera.id}`)
       if (res.ok) {
@@ -78,11 +72,7 @@ export default function ContagemPage() {
       } else {
         setLinhaSalva(null)
       }
-    } catch {
-      setLinhaSalva(null)
-    }
-
-    // Carrega contagem
+    } catch { setLinhaSalva(null) }
     carregarContagem(camera.id)
   }
 
@@ -93,31 +83,25 @@ export default function ContagemPage() {
     } catch {}
   }
 
-  // Desenha no canvas quando snapshot ou linha muda
-  useEffect(() => {
-    desenharCanvas()
-  }, [snapshot, linha, pontoA])
+  useEffect(() => { desenharCanvas() }, [snapshot, linha, pontoA])
 
   function desenharCanvas() {
     const canvas = canvasRef.current
-    const img = imgRef.current
+    const img    = imgRef.current
     if (!canvas || !img || !img.complete) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    canvas.width = img.naturalWidth || img.width
+    canvas.width  = img.naturalWidth  || img.width
     canvas.height = img.naturalHeight || img.height
-
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
     const w = canvas.width
     const h = canvas.height
 
-    // Desenha linha salva em cinza (se diferente da atual)
     if (linhaSalva && !linha) {
       ctx.strokeStyle = '#6B7280'
-      ctx.lineWidth = 2
+      ctx.lineWidth   = 2
       ctx.setLineDash([5, 5])
       ctx.beginPath()
       ctx.moveTo(linhaSalva.x1 * w, linhaSalva.y1 * h)
@@ -126,18 +110,15 @@ export default function ContagemPage() {
       ctx.setLineDash([])
     }
 
-    // Desenha linha atual
     if (linha) {
-      // Linha principal
       ctx.strokeStyle = '#FBBF24'
-      ctx.lineWidth = 3
+      ctx.lineWidth   = 3
       ctx.setLineDash([])
       ctx.beginPath()
       ctx.moveTo(linha.x1 * w, linha.y1 * h)
       ctx.lineTo(linha.x2 * w, linha.y2 * h)
       ctx.stroke()
 
-      // Ponto A (verde)
       ctx.fillStyle = '#10B981'
       ctx.beginPath()
       ctx.arc(linha.x1 * w, linha.y1 * h, 8, 0, Math.PI * 2)
@@ -147,7 +128,6 @@ export default function ContagemPage() {
       ctx.textAlign = 'center'
       ctx.fillText('A', linha.x1 * w, linha.y1 * h + 4)
 
-      // Ponto B (vermelho)
       ctx.fillStyle = '#EF4444'
       ctx.beginPath()
       ctx.arc(linha.x2 * w, linha.y2 * h, 8, 0, Math.PI * 2)
@@ -155,16 +135,14 @@ export default function ContagemPage() {
       ctx.fillStyle = 'white'
       ctx.fillText('B', linha.x2 * w, linha.y2 * h + 4)
 
-      // Seta de direÃƒÂ§ÃƒÂ£o AÃ¢â€ â€™B
       const mx = (linha.x1 + linha.x2) / 2 * w
       const my = (linha.y1 + linha.y2) / 2 * h
       ctx.fillStyle = '#FBBF24'
       ctx.font = 'bold 14px sans-serif'
       ctx.textAlign = 'center'
-      ctx.fillText('Ã¢â€ â€™ entrada', mx + 20, my - 10)
+      ctx.fillText('-> entrada', mx + 20, my - 10)
     }
 
-    // Ponto A temporÃƒÂ¡rio (durante desenho)
     if (pontoA && !linha) {
       ctx.fillStyle = '#10B981'
       ctx.beginPath()
@@ -181,18 +159,15 @@ export default function ContagemPage() {
     if (!desenhando) return
     const canvas = canvasRef.current
     if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
+    const rect  = canvas.getBoundingClientRect()
+    const scaleX = canvas.width  / rect.width
     const scaleY = canvas.height / rect.height
     const x = ((e.clientX - rect.left) * scaleX) / canvas.width
-    const y = ((e.clientY - rect.top) * scaleY) / canvas.height
+    const y = ((e.clientY - rect.top)  * scaleY) / canvas.height
 
     if (!pontoA) {
-      // Primeiro clique = ponto A
       setPontoA({ x, y })
     } else {
-      // Segundo clique = ponto B Ã¢â€ â€™ linha completa
       setLinha({ x1: pontoA.x, y1: pontoA.y, x2: x, y2: y })
       setPontoA(null)
       setDesenhando(false)
@@ -209,23 +184,18 @@ export default function ContagemPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           camera_id: cameraSelecionada.id,
-          x1: linha.x1,
-          y1: linha.y1,
-          x2: linha.x2,
-          y2: linha.y2,
+          x1: linha.x1, y1: linha.y1,
+          x2: linha.x2, y2: linha.y2,
         })
       })
       if (res.ok) {
         setLinhaSalva(linha)
-        setMensagem('Ã¢Å“â€¦ Linha salva! O worker vai usar esta linha em atÃƒÂ© 30 segundos.')
+        setMensagem('Linha salva! O worker vai usar em ate 30 segundos.')
       } else {
-        setMensagem('Ã¢Â�Å’ Erro ao salvar linha.')
+        setMensagem('Erro ao salvar linha.')
       }
-    } catch {
-      setMensagem('Ã¢Â�Å’ Erro de conexÃƒÂ£o.')
-    } finally {
-      setSalvando(false)
-    }
+    } catch { setMensagem('Erro de conexao.') }
+    finally { setSalvando(false) }
   }
 
   function resetarLinha() {
@@ -247,126 +217,107 @@ export default function ContagemPage() {
     <main className="min-h-screen bg-gray-950 text-white p-8">
       <div className="max-w-7xl mx-auto">
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-blue-400">Linha de Contagem</h1>
             <p className="text-gray-400 mt-1">Desenhe uma linha para contar pessoas que cruzam</p>
           </div>
-          <div className="flex items-center gap-3">
-            {usuario && <span className="text-gray-400 text-sm hidden md:block">Ã°Å¸â€˜Â¤ {usuario.nome}</span>}
-            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
-              Ã¢â€ Â� Dashboard
+          <div className="flex gap-3">
+            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition text-sm">
+              Dashboard
             </Link>
-            <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300">
+            <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300 text-sm">
               Sair
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-8">
-
-          {/* Coluna esquerda Ã¢â‚¬â€� seleÃƒÂ§ÃƒÂ£o de cÃƒÂ¢mera + contagem */}
-          <div className="space-y-6">
-
-            {/* SeleÃƒÂ§ÃƒÂ£o de cÃƒÂ¢mera */}
-            <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-lg font-bold mb-4">Selecionar CÃƒÂ¢mera</h2>
-              <div className="space-y-2">
-                {cameras.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => selecionarCamera(c)}
-                    className={`w-full text-left px-4 py-3 rounded-lg transition ${
-                      cameraSelecionada?.id === c.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                    }`}
-                  >
-                    <p className="font-bold">{c.nome}</p>
-                    <p className="text-xs opacity-70 truncate">{c.rtsp_url}</p>
-                  </button>
-                ))}
-              </div>
+        <div className="grid grid-cols-3 gap-6">
+          {/* Lista de cameras */}
+          <div className="space-y-4">
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h2 className="font-bold text-lg mb-3">Selecionar Camera</h2>
+              {cameras.length === 0 ? (
+                <p className="text-gray-400 text-sm">Nenhuma camera disponivel.</p>
+              ) : (
+                <div className="space-y-2">
+                  {cameras.filter(c => c.ativo).map(c => (
+                    <button key={c.id} onClick={() => selecionarCamera(c)}
+                      className={`w-full text-left p-3 rounded-lg transition ${
+                        cameraSelecionada?.id === c.id
+                          ? 'bg-blue-700 text-white'
+                          : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                      }`}>
+                      <p className="font-bold text-sm">{c.nome}</p>
+                      <p className="text-xs text-gray-400 truncate">{c.rtsp_url}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Contagem */}
             {contagem && (
-              <div className="bg-gray-800 rounded-xl p-6">
-                <h2 className="text-lg font-bold mb-4">Contagem em Tempo Real</h2>
-                <div className="space-y-3">
-                  <div className="bg-green-900/30 border border-green-500/30 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm">Entradas (AÃ¢â€ â€™B)</p>
-                    <p className="text-4xl font-bold text-green-400">{contagem.entradas}</p>
+              <div className="bg-gray-800 rounded-xl p-4">
+                <h2 className="font-bold text-lg mb-3">Contagem em Tempo Real</h2>
+                <div className="space-y-2">
+                  <div className="bg-green-900/40 rounded-lg p-3">
+                    <p className="text-green-400 text-xs font-bold">Entradas (A-B)</p>
+                    <p className="text-3xl font-bold text-green-400">{contagem.entradas}</p>
                   </div>
-                  <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm">SaÃƒÂ­das (BÃ¢â€ â€™A)</p>
-                    <p className="text-4xl font-bold text-red-400">{contagem.saidas}</p>
+                  <div className="bg-red-900/40 rounded-lg p-3">
+                    <p className="text-red-400 text-xs font-bold">Saidas (B-A)</p>
+                    <p className="text-3xl font-bold text-red-400">{contagem.saidas}</p>
                   </div>
-                  <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm">Pessoas dentro agora</p>
-                    <p className="text-4xl font-bold text-blue-400">{contagem.saldo}</p>
+                  <div className="bg-blue-900/40 rounded-lg p-3">
+                    <p className="text-blue-400 text-xs font-bold">Saldo atual</p>
+                    <p className="text-3xl font-bold text-blue-400">{contagem.saldo}</p>
                   </div>
                 </div>
-                <p className="text-gray-500 text-xs mt-3">Atualiza a cada 5s</p>
               </div>
             )}
 
-            {/* InstruÃƒÂ§ÃƒÂµes */}
-            <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-lg font-bold mb-3">Como usar</h2>
-              <ol className="space-y-2 text-sm text-gray-400">
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">1.</span> Selecione uma cÃƒÂ¢mera</li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">2.</span> Clique em "Desenhar linha"</li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">3.</span> Clique no ponto A <span className="text-green-400">(verde)</span></li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">4.</span> Clique no ponto B <span className="text-red-400">(vermelho)</span></li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">5.</span> Clique em "Salvar linha"</li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">6.</span> AÃ¢â€ â€™B conta como <span className="text-green-400">entrada</span></li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">7.</span> BÃ¢â€ â€™A conta como <span className="text-red-400">saÃƒÂ­da</span></li>
+            {/* Como usar */}
+            <div className="bg-gray-800 rounded-xl p-4">
+              <h2 className="font-bold mb-3">Como usar</h2>
+              <ol className="space-y-1 text-sm text-gray-400">
+                <li><span className="text-blue-400 font-bold">1.</span> Selecione uma camera</li>
+                <li><span className="text-blue-400 font-bold">2.</span> Clique em "Desenhar linha"</li>
+                <li><span className="text-blue-400 font-bold">3.</span> Clique no ponto A <span className="text-green-400">(verde)</span></li>
+                <li><span className="text-blue-400 font-bold">4.</span> Clique no ponto B <span className="text-red-400">(vermelho)</span></li>
+                <li><span className="text-blue-400 font-bold">5.</span> Clique em "Salvar linha"</li>
+                <li><span className="text-blue-400 font-bold">6.</span> A-B conta como <span className="text-green-400">entrada</span></li>
+                <li><span className="text-blue-400 font-bold">7.</span> B-A conta como <span className="text-red-400">saida</span></li>
               </ol>
             </div>
-
           </div>
 
-          {/* Coluna direita Ã¢â‚¬â€� canvas */}
+          {/* Canvas principal */}
           <div className="col-span-2">
-            <div className="bg-gray-800 rounded-xl p-6">
+            <div className="bg-gray-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold">
-                  {cameraSelecionada ? cameraSelecionada.nome : 'Selecione uma cÃƒÂ¢mera'}
+                <h2 className="font-bold text-lg">
+                  {cameraSelecionada ? cameraSelecionada.nome : 'Selecione uma camera'}
                 </h2>
                 {cameraSelecionada && (
                   <div className="flex gap-2">
-                    {!desenhando && (
-                      <button
-                        onClick={() => { setDesenhando(true); setLinha(null); setPontoA(null) }}
-                        className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg text-sm font-bold transition"
-                      >
-                        Ã¢Å“Â�Ã¯Â¸Â� Desenhar linha
-                      </button>
-                    )}
-                    {desenhando && (
-                      <button
-                        onClick={resetarLinha}
-                        className="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded-lg text-sm font-bold transition"
-                      >
-                        Cancelar
-                      </button>
-                    )}
-                    {linha && !desenhando && (
+                    <button
+                      onClick={() => { setDesenhando(true); setLinha(null); setPontoA(null) }}
+                      className={`px-4 py-2 rounded-lg font-bold text-sm transition ${
+                        desenhando ? 'bg-yellow-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'
+                      }`}>
+                      {desenhando
+                        ? pontoA ? 'Clique no ponto B' : 'Clique no ponto A'
+                        : 'Desenhar linha'}
+                    </button>
+                    {linha && (
                       <>
-                        <button
-                          onClick={resetarLinha}
-                          className="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded-lg text-sm font-bold transition"
-                        >
-                          Ã°Å¸â€”â€˜Ã¯Â¸Â� Apagar
+                        <button onClick={resetarLinha} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold text-sm transition text-white">
+                          Apagar
                         </button>
-                        <button
-                          onClick={salvarLinha}
-                          disabled={salvando}
-                          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-2 rounded-lg text-sm font-bold transition"
-                        >
-                          {salvando ? 'Salvando...' : 'Ã°Å¸â€™Â¾ Salvar linha'}
+                        <button onClick={salvarLinha} disabled={salvando}
+                          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-2 rounded-lg font-bold text-sm transition text-white">
+                          {salvando ? 'Salvando...' : 'Salvar linha'}
                         </button>
                       </>
                     )}
@@ -374,58 +325,33 @@ export default function ContagemPage() {
                 )}
               </div>
 
-              {/* InstruÃƒÂ§ÃƒÂ£o durante desenho */}
-              {desenhando && (
-                <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg px-4 py-2 mb-4 text-sm text-yellow-300">
-                  {!pontoA
-                    ? 'Ã°Å¸â€“Â±Ã¯Â¸Â� Clique para definir o ponto A (inÃƒÂ­cio da linha)'
-                    : 'Ã°Å¸â€“Â±Ã¯Â¸Â� Clique para definir o ponto B (fim da linha)'}
-                </div>
-              )}
-
-              {/* Mensagem de status */}
               {mensagem && (
-                <div className={`rounded-lg px-4 py-2 mb-4 text-sm ${
-                  mensagem.startsWith('Ã¢Å“â€¦') ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'
-                }`}>
+                <div className={`mb-3 p-2 rounded-lg text-sm ${mensagem.includes('Erro') ? 'bg-red-900/40 text-red-300' : 'bg-green-900/40 text-green-300'}`}>
                   {mensagem}
                 </div>
               )}
 
-              {/* Canvas com snapshot */}
-              {cameraSelecionada ? (
-                <div className="relative">
-                  {/* Imagem oculta para carregar o snapshot */}
-                  <img
-                    ref={imgRef}
-                    src={snapshot || ''}
-                    className="hidden"
-                    onLoad={desenharCanvas}
-                    alt=""
-                  />
-                  <canvas
-                    ref={canvasRef}
-                    onClick={handleCanvasClick}
-                    className={`w-full rounded-lg ${desenhando ? 'cursor-crosshair' : 'cursor-default'}`}
-                    style={{ maxHeight: '500px', objectFit: 'contain' }}
-                  />
-                  {!snapshot && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg">
-                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '400px' }}>
+                {snapshot ? (
+                  <>
+                    <img ref={imgRef} src={snapshot} alt="snapshot"
+                      className="w-full h-auto opacity-0 absolute"
+                      onLoad={desenharCanvas} />
+                    <canvas ref={canvasRef}
+                      className={`w-full h-auto ${desenhando ? 'cursor-crosshair' : 'cursor-default'}`}
+                      onClick={handleCanvasClick} />
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-gray-500">
+                    <div className="text-center">
+                      <div className="text-5xl mb-2">[ ]</div>
+                      <p>Selecione uma camera para comecar</p>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <div className="text-5xl mb-3">Ã°Å¸â€œÂ·</div>
-                    <p>Selecione uma cÃƒÂ¢mera para comeÃƒÂ§ar</p>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-
         </div>
       </div>
     </main>
