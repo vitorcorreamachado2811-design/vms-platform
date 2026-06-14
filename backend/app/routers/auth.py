@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 from uuid import UUID
 import uuid
 import hashlib
@@ -17,6 +18,7 @@ class UsuarioCreate(BaseModel):
     email: str
     senha: str
     empresa_id: UUID
+    perfil: Optional[str] = 'familiar'
 
 class UsuarioResponse(BaseModel):
     id: UUID
@@ -46,9 +48,40 @@ def registrar(dados: UsuarioCreate, db: Session = Depends(get_db)):
         email=dados.email,
         senha_hash=hash_senha(dados.senha),
         empresa_id=dados.empresa_id,
-        perfil='familiar',
+        perfil=dados.perfil or 'familiar',
     )
     db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+    return usuario
+
+@router.get("/usuarios", response_model=list[UsuarioResponse])
+def listar_usuarios(empresa_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Usuario)
+    if empresa_id:
+        query = query.filter(Usuario.empresa_id == empresa_id)
+    return query.all()
+
+@router.delete("/usuarios/{usuario_id}")
+def deletar_usuario(usuario_id: UUID, db: Session = Depends(get_db)):
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    db.delete(usuario)
+    db.commit()
+    return {"ok": True}
+
+@router.patch("/usuarios/{usuario_id}", response_model=UsuarioResponse)
+def atualizar_usuario(usuario_id: UUID, dados: dict, db: Session = Depends(get_db)):
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if "perfil" in dados:
+        usuario.perfil = dados["perfil"]
+    if "nome" in dados:
+        usuario.nome = dados["nome"]
+    if "ativo" in dados:
+        usuario.ativo = dados["ativo"]
     db.commit()
     db.refresh(usuario)
     return usuario
