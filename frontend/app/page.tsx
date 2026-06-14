@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from './hooks/useAuth'
+import { useNotificacoes } from './hooks/useNotificacoes'
 
 const API = 'https://vms-platform-production.up.railway.app'
 
@@ -175,6 +176,7 @@ function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
 
 export default function Dashboard() {
   const { usuario, carregando: authCarregando, logout, pode, perfil } = useAuth()
+  const { naoLidas, marcarComoLidas } = useNotificacoes(usuario?.empresa_id)
   const [cameras, setCameras]           = useState<Camera[]>([])
   const [empresas, setEmpresas]         = useState<Empresa[]>([])
   const [usuarios, setUsuarios]         = useState<UsuarioItem[]>([])
@@ -398,7 +400,15 @@ export default function Dashboard() {
             <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">📷 Ao Vivo</Link>
             {pode.verContagem && <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">📊 Contagem</Link>}
             {pode.verHeatmap && <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">🌡️ Heatmap</Link>}
-            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">⚡ Eventos</Link>
+            <Link href="/eventos" onClick={marcarComoLidas}
+              className="relative bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">
+              ⚡ Eventos
+              {naoLidas > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold animate-pulse">
+                  {naoLidas > 9 ? '9+' : naoLidas}
+                </span>
+              )}
+            </Link>
             <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">🏃 Hábitos</Link>
             <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded-lg font-bold transition text-red-300 text-sm">Sair</button>
           </div>
