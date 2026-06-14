@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -54,7 +54,7 @@ export default function ContagemPage() {
   }, [cameraSelecionada])
 
   async function carregarCameras() {
-    const data = await fetch(`${API}/cameras/`).then(r => r.json())
+    const data = await fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json())
     setCameras(Array.isArray(data) ? data : [])
   }
 
@@ -155,16 +155,16 @@ export default function ContagemPage() {
       ctx.fillStyle = 'white'
       ctx.fillText('B', linha.x2 * w, linha.y2 * h + 4)
 
-      // Seta de direção A→B
+      // Seta de direÃ§Ã£o Aâ†’B
       const mx = (linha.x1 + linha.x2) / 2 * w
       const my = (linha.y1 + linha.y2) / 2 * h
       ctx.fillStyle = '#FBBF24'
       ctx.font = 'bold 14px sans-serif'
       ctx.textAlign = 'center'
-      ctx.fillText('→ entrada', mx + 20, my - 10)
+      ctx.fillText('â†’ entrada', mx + 20, my - 10)
     }
 
-    // Ponto A temporário (durante desenho)
+    // Ponto A temporÃ¡rio (durante desenho)
     if (pontoA && !linha) {
       ctx.fillStyle = '#10B981'
       ctx.beginPath()
@@ -192,7 +192,7 @@ export default function ContagemPage() {
       // Primeiro clique = ponto A
       setPontoA({ x, y })
     } else {
-      // Segundo clique = ponto B → linha completa
+      // Segundo clique = ponto B â†’ linha completa
       setLinha({ x1: pontoA.x, y1: pontoA.y, x2: x, y2: y })
       setPontoA(null)
       setDesenhando(false)
@@ -217,12 +217,12 @@ export default function ContagemPage() {
       })
       if (res.ok) {
         setLinhaSalva(linha)
-        setMensagem('✅ Linha salva! O worker vai usar esta linha em até 30 segundos.')
+        setMensagem('âœ… Linha salva! O worker vai usar esta linha em atÃ© 30 segundos.')
       } else {
-        setMensagem('❌ Erro ao salvar linha.')
+        setMensagem('âŒ Erro ao salvar linha.')
       }
     } catch {
-      setMensagem('❌ Erro de conexão.')
+      setMensagem('âŒ Erro de conexÃ£o.')
     } finally {
       setSalvando(false)
     }
@@ -254,9 +254,9 @@ export default function ContagemPage() {
             <p className="text-gray-400 mt-1">Desenhe uma linha para contar pessoas que cruzam</p>
           </div>
           <div className="flex items-center gap-3">
-            {usuario && <span className="text-gray-400 text-sm hidden md:block">👤 {usuario.nome}</span>}
+            {usuario && <span className="text-gray-400 text-sm hidden md:block">ðŸ‘¤ {usuario.nome}</span>}
             <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
-              ← Dashboard
+              â† Dashboard
             </Link>
             <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300">
               Sair
@@ -266,12 +266,12 @@ export default function ContagemPage() {
 
         <div className="grid grid-cols-3 gap-8">
 
-          {/* Coluna esquerda — seleção de câmera + contagem */}
+          {/* Coluna esquerda â€” seleÃ§Ã£o de cÃ¢mera + contagem */}
           <div className="space-y-6">
 
-            {/* Seleção de câmera */}
+            {/* SeleÃ§Ã£o de cÃ¢mera */}
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-lg font-bold mb-4">Selecionar Câmera</h2>
+              <h2 className="text-lg font-bold mb-4">Selecionar CÃ¢mera</h2>
               <div className="space-y-2">
                 {cameras.map(c => (
                   <button
@@ -296,11 +296,11 @@ export default function ContagemPage() {
                 <h2 className="text-lg font-bold mb-4">Contagem em Tempo Real</h2>
                 <div className="space-y-3">
                   <div className="bg-green-900/30 border border-green-500/30 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm">Entradas (A→B)</p>
+                    <p className="text-gray-400 text-sm">Entradas (Aâ†’B)</p>
                     <p className="text-4xl font-bold text-green-400">{contagem.entradas}</p>
                   </div>
                   <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-4">
-                    <p className="text-gray-400 text-sm">Saídas (B→A)</p>
+                    <p className="text-gray-400 text-sm">SaÃ­das (Bâ†’A)</p>
                     <p className="text-4xl font-bold text-red-400">{contagem.saidas}</p>
                   </div>
                   <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-4">
@@ -312,28 +312,28 @@ export default function ContagemPage() {
               </div>
             )}
 
-            {/* Instruções */}
+            {/* InstruÃ§Ãµes */}
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-lg font-bold mb-3">Como usar</h2>
               <ol className="space-y-2 text-sm text-gray-400">
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">1.</span> Selecione uma câmera</li>
+                <li className="flex gap-2"><span className="text-blue-400 font-bold">1.</span> Selecione uma cÃ¢mera</li>
                 <li className="flex gap-2"><span className="text-blue-400 font-bold">2.</span> Clique em "Desenhar linha"</li>
                 <li className="flex gap-2"><span className="text-blue-400 font-bold">3.</span> Clique no ponto A <span className="text-green-400">(verde)</span></li>
                 <li className="flex gap-2"><span className="text-blue-400 font-bold">4.</span> Clique no ponto B <span className="text-red-400">(vermelho)</span></li>
                 <li className="flex gap-2"><span className="text-blue-400 font-bold">5.</span> Clique em "Salvar linha"</li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">6.</span> A→B conta como <span className="text-green-400">entrada</span></li>
-                <li className="flex gap-2"><span className="text-blue-400 font-bold">7.</span> B→A conta como <span className="text-red-400">saída</span></li>
+                <li className="flex gap-2"><span className="text-blue-400 font-bold">6.</span> Aâ†’B conta como <span className="text-green-400">entrada</span></li>
+                <li className="flex gap-2"><span className="text-blue-400 font-bold">7.</span> Bâ†’A conta como <span className="text-red-400">saÃ­da</span></li>
               </ol>
             </div>
 
           </div>
 
-          {/* Coluna direita — canvas */}
+          {/* Coluna direita â€” canvas */}
           <div className="col-span-2">
             <div className="bg-gray-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold">
-                  {cameraSelecionada ? cameraSelecionada.nome : 'Selecione uma câmera'}
+                  {cameraSelecionada ? cameraSelecionada.nome : 'Selecione uma cÃ¢mera'}
                 </h2>
                 {cameraSelecionada && (
                   <div className="flex gap-2">
@@ -342,7 +342,7 @@ export default function ContagemPage() {
                         onClick={() => { setDesenhando(true); setLinha(null); setPontoA(null) }}
                         className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg text-sm font-bold transition"
                       >
-                        ✏️ Desenhar linha
+                        âœï¸ Desenhar linha
                       </button>
                     )}
                     {desenhando && (
@@ -359,14 +359,14 @@ export default function ContagemPage() {
                           onClick={resetarLinha}
                           className="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded-lg text-sm font-bold transition"
                         >
-                          🗑️ Apagar
+                          ðŸ—‘ï¸ Apagar
                         </button>
                         <button
                           onClick={salvarLinha}
                           disabled={salvando}
                           className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-2 rounded-lg text-sm font-bold transition"
                         >
-                          {salvando ? 'Salvando...' : '💾 Salvar linha'}
+                          {salvando ? 'Salvando...' : 'ðŸ’¾ Salvar linha'}
                         </button>
                       </>
                     )}
@@ -374,19 +374,19 @@ export default function ContagemPage() {
                 )}
               </div>
 
-              {/* Instrução durante desenho */}
+              {/* InstruÃ§Ã£o durante desenho */}
               {desenhando && (
                 <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg px-4 py-2 mb-4 text-sm text-yellow-300">
                   {!pontoA
-                    ? '🖱️ Clique para definir o ponto A (início da linha)'
-                    : '🖱️ Clique para definir o ponto B (fim da linha)'}
+                    ? 'ðŸ–±ï¸ Clique para definir o ponto A (inÃ­cio da linha)'
+                    : 'ðŸ–±ï¸ Clique para definir o ponto B (fim da linha)'}
                 </div>
               )}
 
               {/* Mensagem de status */}
               {mensagem && (
                 <div className={`rounded-lg px-4 py-2 mb-4 text-sm ${
-                  mensagem.startsWith('✅') ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'
+                  mensagem.startsWith('âœ…') ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'
                 }`}>
                   {mensagem}
                 </div>
@@ -418,8 +418,8 @@ export default function ContagemPage() {
               ) : (
                 <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
                   <div className="text-center text-gray-500">
-                    <div className="text-5xl mb-3">📷</div>
-                    <p>Selecione uma câmera para começar</p>
+                    <div className="text-5xl mb-3">ðŸ“·</div>
+                    <p>Selecione uma cÃ¢mera para comeÃ§ar</p>
                   </div>
                 </div>
               )}
