@@ -1,4 +1,4 @@
-'use client'
+ï»¿'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -60,7 +60,7 @@ const MARCAS: Record<string, {
     templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/axis-cgi/mjpg/video.cgi?camera=${c}`,
     portaPadrao: '554', portaHttpPadrao: '80',
   },
-  generico: { label: 'Genérico (URL livre)', template: () => '', portaPadrao: '554' },
+  generico: { label: 'Genï¿½rico (URL livre)', template: () => '', portaPadrao: '554' },
 }
 
 const PERFIL_COR: Record<string, string> = {
@@ -79,7 +79,7 @@ function ModalConfirmar({ nome, onConfirmar, onCancelar, deletando }: {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
         <div className="text-4xl mb-4 text-center">???</div>
-        <h2 className="text-xl font-bold text-white text-center mb-2">Deletar câmera?</h2>
+        <h2 className="text-xl font-bold text-white text-center mb-2">Deletar cï¿½mera?</h2>
         <p className="text-gray-400 text-center mb-6">
           Tem certeza que deseja deletar <span className="text-white font-bold">"{nome}"</span>?
         </p>
@@ -121,13 +121,13 @@ function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold text-white mb-4">?? Editar câmera</h2>
+        <h2 className="text-xl font-bold text-white mb-4">?? Editar cï¿½mera</h2>
         {erro && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">? {erro}</div>}
         <div className="space-y-3">
           <div><label className="text-gray-400 text-xs">Nome</label>
             <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={nome} onChange={e => setNome(e.target.value)} /></div>
           <div className="flex items-center justify-between bg-gray-900 rounded-lg p-3">
-            <span className="text-gray-300 text-sm font-bold">Câmera ativa</span>
+            <span className="text-gray-300 text-sm font-bold">Cï¿½mera ativa</span>
             <button onClick={() => setAtivo(v => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${ativo ? 'bg-green-500' : 'bg-gray-600'}`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${ativo ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
@@ -146,7 +146,7 @@ function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
                   <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta RTSP" value={camPorta} onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuário" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuï¿½rio" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                   <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Senha" type="password" value={camSenha} onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -208,7 +208,7 @@ export default function Dashboard() {
   const [nomeEmpresaEdit, setNomeEmpresaEdit]     = useState('')
   const [emailEmpresaEdit, setEmailEmpresaEdit]   = useState('')
 
-  // Novo usuário
+  // Novo usuï¿½rio
   const [novoNome, setNovoNome]         = useState('')
   const [novoEmail, setNovoEmail]       = useState('')
   const [novaSenha, setNovaSenha]       = useState('')
@@ -293,11 +293,11 @@ export default function Dashboard() {
         signal: controller.signal,
       })
       clearTimeout(timeout)
-      if (!res.ok) throw new Error('Erro ao cadastrar câmera')
+      if (!res.ok) throw new Error('Erro ao cadastrar cï¿½mera')
       setNomeCamera(''); setRtspUrl(''); setEmpresaId('')
       await carregarDados()
     } catch (e: any) {
-      setErro(e.name === 'AbortError' ? 'Timeout — tente novamente' : 'Erro ao cadastrar câmera')
+      setErro(e.name === 'AbortError' ? 'Timeout ï¿½ tente novamente' : 'Erro ao cadastrar cï¿½mera')
     } finally { setCriando(false) }
   }
 
@@ -345,7 +345,7 @@ export default function Dashboard() {
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.detail || 'Erro ao criar usuário')
+        throw new Error(err.detail || 'Erro ao criar usuï¿½rio')
       }
       setNovoNome(''); setNovoEmail(''); setNovaSenha(''); setNovoPerfil('familiar')
       await carregarUsuarios()
@@ -374,7 +374,7 @@ export default function Dashboard() {
       setCameras(prev => prev.filter(c => c.id !== camera.id))
       setCameraParaDeletar(null)
     } catch (e: any) {
-      setErro(e.name === 'AbortError' ? 'Timeout ao deletar — tente novamente' : 'Erro ao deletar câmera')
+      setErro(e.name === 'AbortError' ? 'Timeout ao deletar ï¿½ tente novamente' : 'Erro ao deletar cï¿½mera')
       setCameraParaDeletar(null)
     } finally { setDeletando(false) }
   }
@@ -395,7 +395,7 @@ export default function Dashboard() {
       const atualizada = await res.json()
       setCameras(prev => prev.map(c => c.id === atualizada.id ? atualizada : c))
       setCameraParaEditar(null)
-    } catch (e: any) { setErroEdicao(e.name === 'AbortError' ? 'Timeout' : 'Erro ao editar câmera') }
+    } catch (e: any) { setErroEdicao(e.name === 'AbortError' ? 'Timeout' : 'Erro ao editar cï¿½mera') }
     finally { setEditando(false) }
   }
 
@@ -437,7 +437,7 @@ export default function Dashboard() {
                 </span>
               )}
             </Link>
-            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">?? Hábitos</Link>
+            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">?? Hï¿½bitos</Link>
             <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded-lg font-bold transition text-red-300 text-sm">Sair</button>
           </div>
         </div>
@@ -445,22 +445,22 @@ export default function Dashboard() {
         {erro && (
           <div className="bg-red-900/40 border border-red-500 rounded-xl p-4 mb-6 flex items-center justify-between">
             <span className="text-red-300">?? {erro}</span>
-            <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 text-xl">×</button>
+            <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 text-xl">ï¿½</button>
           </div>
         )}
 
         {/* Cards resumo */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Câmeras</p><p className="text-3xl font-bold text-blue-400">{cameras.length}</p></div>
+          <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Cï¿½meras</p><p className="text-3xl font-bold text-blue-400">{cameras.length}</p></div>
           <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Empresas</p><p className="text-3xl font-bold text-green-400">{empresas.length}</p></div>
           <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Status</p><p className="text-3xl font-bold text-green-400">Online</p></div>
         </div>
 
         {/* Abas */}
         <div className="flex gap-2 mb-6">
-          <button onClick={() => setAba('cameras')} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}>Câmeras</button>
+          <button onClick={() => setAba('cameras')} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}>Cï¿½meras</button>
           {pode.cadastrarEmpresa && <button onClick={() => setAba('empresas')} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'empresas' ? 'bg-green-600' : 'bg-gray-800 hover:bg-gray-700'}`}>Empresas</button>}
-          {pode.gerenciarUsuarios && <button onClick={() => { setAba('usuarios'); carregarUsuarios() }} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'usuarios' ? 'bg-orange-600' : 'bg-gray-800 hover:bg-gray-700'}`}>?? Usuários</button>}
+          {pode.gerenciarUsuarios && <button onClick={() => { setAba('usuarios'); carregarUsuarios() }} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'usuarios' ? 'bg-orange-600' : 'bg-gray-800 hover:bg-gray-700'}`}>?? Usuï¿½rios</button>}
         </div>
 
         {/* Aba Cameras */}
@@ -468,9 +468,9 @@ export default function Dashboard() {
           <div className={`grid gap-8 ${pode.cadastrarCamera ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {pode.cadastrarCamera && (
               <div className="bg-gray-800 rounded-xl p-6">
-                <h2 className="text-xl font-bold mb-4">Cadastrar Câmera</h2>
+                <h2 className="text-xl font-bold mb-4">Cadastrar Cï¿½mera</h2>
                 <div className="space-y-3">
-                  <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Nome da câmera" value={nomeCamera} onChange={e => setNomeCamera(e.target.value)} />
+                  <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Nome da cï¿½mera" value={nomeCamera} onChange={e => setNomeCamera(e.target.value)} />
                   <select className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={marca} onChange={e => onMarcaChange(e.target.value)}>
                     <option value="">Selecione a marca</option>
                     {Object.entries(MARCAS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -482,7 +482,7 @@ export default function Dashboard() {
                         <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta" value={camPorta} onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuário" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuï¿½rio" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                         <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Senha" type="password" value={camSenha} onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                       </div>
                       <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm w-full" placeholder="Canal (ex: 1)" value={camCanal} onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
@@ -505,15 +505,15 @@ export default function Dashboard() {
                   </select>
                   <button onClick={criarCamera} disabled={criando || !nomeCamera || !rtspUrl || !empresaId}
                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2">
-                    {criando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Cadastrando...</> : '+ Cadastrar Câmera'}
+                    {criando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Cadastrando...</> : '+ Cadastrar Cï¿½mera'}
                   </button>
                 </div>
               </div>
             )}
 
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Câmeras Cadastradas</h2>
-              {cameras.length === 0 ? <p className="text-gray-400">Nenhuma câmera cadastrada ainda.</p> : (
+              <h2 className="text-xl font-bold mb-4">Cï¿½meras Cadastradas</h2>
+              {cameras.length === 0 ? <p className="text-gray-400">Nenhuma cï¿½mera cadastrada ainda.</p> : (
                 <div className="space-y-3">
                   {cameras.map(c => (
                     <div key={c.id} className="bg-gray-700 rounded-lg p-3">
@@ -595,12 +595,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Aba Usuários — só admin */}
+        {/* Aba Usuï¿½rios ï¿½ sï¿½ admin */}
         {aba === 'usuarios' && pode.gerenciarUsuarios && (
           <div className="grid grid-cols-2 gap-8">
-            {/* Formulário novo usuário */}
+            {/* Formulï¿½rio novo usuï¿½rio */}
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">?? Criar Usuário</h2>
+              <h2 className="text-xl font-bold mb-4">?? Criar Usuï¿½rio</h2>
               {erroUser && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">? {erroUser}</div>}
               <div className="space-y-3">
                 <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Nome completo" value={novoNome} onChange={e => setNovoNome(e.target.value)} />
@@ -618,23 +618,23 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <div className="mt-2 p-2 bg-gray-900 rounded-lg text-xs text-gray-400">
-                    {novoPerfil === 'admin' && '?? Acesso total — pode cadastrar câmeras, usuários e empresas'}
-                    {novoPerfil === 'gestor' && '?? Vê tudo incluindo heatmap e contagem, mas não edita'}
-                    {novoPerfil === 'cuidador' && '??? Vê câmeras, eventos e hábitos'}
-                    {novoPerfil === 'familiar' && '?? Acesso básico — câmeras, eventos e hábitos'}
+                    {novoPerfil === 'admin' && '?? Acesso total ï¿½ pode cadastrar cï¿½meras, usuï¿½rios e empresas'}
+                    {novoPerfil === 'gestor' && '?? Vï¿½ tudo incluindo heatmap e contagem, mas nï¿½o edita'}
+                    {novoPerfil === 'cuidador' && '??? Vï¿½ cï¿½meras, eventos e hï¿½bitos'}
+                    {novoPerfil === 'familiar' && '?? Acesso bï¿½sico ï¿½ cï¿½meras, eventos e hï¿½bitos'}
                   </div>
                 </div>
                 <button onClick={criarUsuario} disabled={criandoUser || !novoNome || !novoEmail || !novaSenha}
                   className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2">
-                  {criandoUser ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Criando...</> : '+ Criar Usuário'}
+                  {criandoUser ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Criando...</> : '+ Criar Usuï¿½rio'}
                 </button>
               </div>
             </div>
 
-            {/* Lista de usuários */}
+            {/* Lista de usuï¿½rios */}
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Usuários da Empresa</h2>
-              {usuarios.length === 0 ? <p className="text-gray-400">Nenhum usuário encontrado.</p> : (
+              <h2 className="text-xl font-bold mb-4">Usuï¿½rios da Empresa</h2>
+              {usuarios.length === 0 ? <p className="text-gray-400">Nenhum usuï¿½rio encontrado.</p> : (
                 <div className="space-y-3">
                   {usuarios.map(u => (
                     <div key={u.id} className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
@@ -646,7 +646,7 @@ export default function Dashboard() {
                         <p className="text-gray-400 text-sm">{u.email}</p>
                       </div>
                       {u.id !== usuario?.id && (
-                        <button onClick={() => deletarUsuarioItem(u.id)} className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar usuário">???</button>
+                        <button onClick={() => deletarUsuarioItem(u.id)} className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar usuï¿½rio">???</button>
                       )}
                     </div>
                   ))}
