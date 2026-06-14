@@ -88,7 +88,8 @@ export default function ContagemPage() {
   function desenharCanvas() {
     const canvas = canvasRef.current
     const img    = imgRef.current
-    if (!canvas || !img || !img.complete) return
+    if (!canvas || !img) return
+    if (!img.naturalWidth && !img.complete) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -335,7 +336,7 @@ export default function ContagemPage() {
                 {snapshot ? (
                   <>
                     <img ref={imgRef} src={snapshot} alt="snapshot"
-                      className="w-full h-auto opacity-0 absolute"
+                      style={{position:"absolute",opacity:0,pointerEvents:"none",width:1,height:1}}
                       onLoad={desenharCanvas} />
                     <canvas ref={canvasRef}
                       className={`w-full h-auto ${desenhando ? 'cursor-crosshair' : 'cursor-default'}`}
