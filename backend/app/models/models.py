@@ -10,6 +10,7 @@ class Empresa(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nome = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
+    ativo = Column(Boolean, default=True)
     cameras = relationship("Camera", back_populates="empresa")
     usuarios = relationship("Usuario", back_populates="empresa")
 
