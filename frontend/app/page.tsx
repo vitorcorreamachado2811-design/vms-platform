@@ -60,7 +60,7 @@ const MARCAS: Record<string, {
     templateHttp: (u,s,ip,p,c) => `http://${u}:${s}@${ip}:${p}/axis-cgi/mjpg/video.cgi?camera=${c}`,
     portaPadrao: '554', portaHttpPadrao: '80',
   },
-  generico: { label: 'Gen�rico (URL livre)', template: () => '', portaPadrao: '554' },
+  generico: { label: 'Generico (URL livre)', template: () => '', portaPadrao: '554' },
 }
 
 const PERFIL_COR: Record<string, string> = {
@@ -78,8 +78,8 @@ function ModalConfirmar({ nome, onConfirmar, onCancelar, deletando }: {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-        <div className="text-4xl mb-4 text-center">???</div>
-        <h2 className="text-xl font-bold text-white text-center mb-2">Deletar c�mera?</h2>
+        <div className="text-4xl mb-4 text-center">Excluir</div>
+        <h2 className="text-xl font-bold text-white text-center mb-2">Deletar camera?</h2>
         <p className="text-gray-400 text-center mb-6">
           Tem certeza que deseja deletar <span className="text-white font-bold">"{nome}"</span>?
         </p>
@@ -121,13 +121,13 @@ function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold text-white mb-4">?? Editar c�mera</h2>
-        {erro && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">? {erro}</div>}
+        <h2 className="text-xl font-bold text-white mb-4">Editar Editar camera</h2>
+        {erro && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">! {erro}</div>}
         <div className="space-y-3">
           <div><label className="text-gray-400 text-xs">Nome</label>
             <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={nome} onChange={e => setNome(e.target.value)} /></div>
           <div className="flex items-center justify-between bg-gray-900 rounded-lg p-3">
-            <span className="text-gray-300 text-sm font-bold">C�mera ativa</span>
+            <span className="text-gray-300 text-sm font-bold">Camera ativa</span>
             <button onClick={() => setAtivo(v => !v)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${ativo ? 'bg-green-500' : 'bg-gray-600'}`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${ativo ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
@@ -146,14 +146,14 @@ function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
                   <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta RTSP" value={camPorta} onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usu�rio" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                  <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuario" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                   <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Senha" type="password" value={camSenha} onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Canal" value={camCanal} onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                   {MARCAS[marca]?.templateHttp && <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta HTTP" value={camPortaHttp} onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />}
                 </div>
-                <button onClick={gerarUrl} className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded-lg transition">?? Gerar URLs</button>
+                <button onClick={gerarUrl} className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs py-1.5 rounded-lg transition"> Gerar URLs</button>
               </>
             )}
           </div>
@@ -166,7 +166,7 @@ function ModalEditar({ camera, onSalvar, onCancelar, salvando, erro }: {
           <button onClick={onCancelar} disabled={salvando} className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition">Cancelar</button>
           <button onClick={() => onSalvar({ nome, rtsp_url: rtspUrl, http_url: httpUrl, ativo })} disabled={salvando || !nome || !rtspUrl}
             className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2">
-            {salvando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : '?? Salvar'}
+            {salvando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : ' Salvar'}
           </button>
         </div>
       </div>
@@ -208,7 +208,7 @@ export default function Dashboard() {
   const [nomeEmpresaEdit, setNomeEmpresaEdit]     = useState('')
   const [emailEmpresaEdit, setEmailEmpresaEdit]   = useState('')
 
-  // Novo usu�rio
+  // Novo usuario
   const [novoNome, setNovoNome]         = useState('')
   const [novoEmail, setNovoEmail]       = useState('')
   const [novaSenha, setNovaSenha]       = useState('')
@@ -293,11 +293,11 @@ export default function Dashboard() {
         signal: controller.signal,
       })
       clearTimeout(timeout)
-      if (!res.ok) throw new Error('Erro ao cadastrar c�mera')
+      if (!res.ok) throw new Error('Erro ao cadastrar camera')
       setNomeCamera(''); setRtspUrl(''); setEmpresaId('')
       await carregarDados()
     } catch (e: any) {
-      setErro(e.name === 'AbortError' ? 'Timeout � tente novamente' : 'Erro ao cadastrar c�mera')
+      setErro(e.name === 'AbortError' ? 'Timeout - tente novamente' : 'Erro ao cadastrar camera')
     } finally { setCriando(false) }
   }
 
@@ -345,7 +345,7 @@ export default function Dashboard() {
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.detail || 'Erro ao criar usu�rio')
+        throw new Error(err.detail || 'Erro ao criar usuario')
       }
       setNovoNome(''); setNovoEmail(''); setNovaSenha(''); setNovoPerfil('familiar')
       await carregarUsuarios()
@@ -374,7 +374,7 @@ export default function Dashboard() {
       setCameras(prev => prev.filter(c => c.id !== camera.id))
       setCameraParaDeletar(null)
     } catch (e: any) {
-      setErro(e.name === 'AbortError' ? 'Timeout ao deletar � tente novamente' : 'Erro ao deletar c�mera')
+      setErro(e.name === 'AbortError' ? 'Timeout ao deletar - tente novamente' : 'Erro ao deletar camera')
       setCameraParaDeletar(null)
     } finally { setDeletando(false) }
   }
@@ -395,7 +395,7 @@ export default function Dashboard() {
       const atualizada = await res.json()
       setCameras(prev => prev.map(c => c.id === atualizada.id ? atualizada : c))
       setCameraParaEditar(null)
-    } catch (e: any) { setErroEdicao(e.name === 'AbortError' ? 'Timeout' : 'Erro ao editar c�mera') }
+    } catch (e: any) { setErroEdicao(e.name === 'AbortError' ? 'Timeout' : 'Erro ao editar camera') }
     finally { setEditando(false) }
   }
 
@@ -421,46 +421,46 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {usuario && (
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 text-sm hidden md:block">?? {usuario.nome}</span>
+                <span className="text-gray-400 text-sm hidden md:block"> {usuario.nome}</span>
                 <span className={`text-xs px-2 py-1 rounded-full font-bold ${PERFIL_COR[perfil] || 'bg-gray-700 text-gray-300'}`}>{perfil.toUpperCase()}</span>
               </div>
             )}
-            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">?? Ao Vivo</Link>
-            {pode.verContagem && <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">?? Contagem</Link>}
-            {pode.verHeatmap && <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm">??? Heatmap</Link>}
+            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm"> Ao Vivo</Link>
+            {pode.verContagem && <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm"> Contagem</Link>}
+            {pode.verHeatmap && <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm"> Heatmap</Link>}
             <Link href="/eventos" onClick={marcarComoLidas}
               className="relative bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">
-              ? Eventos
+               Eventos
               {naoLidas > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold animate-pulse">
                   {naoLidas > 9 ? '9+' : naoLidas}
                 </span>
               )}
             </Link>
-            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm">?? H�bitos</Link>
+            <Link href="/habitos" className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-bold transition text-sm"> Habitos</Link>
             <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded-lg font-bold transition text-red-300 text-sm">Sair</button>
           </div>
         </div>
 
         {erro && (
           <div className="bg-red-900/40 border border-red-500 rounded-xl p-4 mb-6 flex items-center justify-between">
-            <span className="text-red-300">?? {erro}</span>
-            <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 text-xl">�</button>
+            <span className="text-red-300">!? {erro}</span>
+            <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 text-xl">x</button>
           </div>
         )}
 
         {/* Cards resumo */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">C�meras</p><p className="text-3xl font-bold text-blue-400">{cameras.length}</p></div>
+          <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Cameras</p><p className="text-3xl font-bold text-blue-400">{cameras.length}</p></div>
           <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Empresas</p><p className="text-3xl font-bold text-green-400">{empresas.length}</p></div>
           <div className="bg-gray-800 rounded-xl p-4"><p className="text-gray-400 text-sm">Status</p><p className="text-3xl font-bold text-green-400">Online</p></div>
         </div>
 
         {/* Abas */}
         <div className="flex gap-2 mb-6">
-          <button onClick={() => setAba('cameras')} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}>C�meras</button>
+          <button onClick={() => setAba('cameras')} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'cameras' ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-700'}`}>Cameras</button>
           {pode.cadastrarEmpresa && <button onClick={() => setAba('empresas')} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'empresas' ? 'bg-green-600' : 'bg-gray-800 hover:bg-gray-700'}`}>Empresas</button>}
-          {pode.gerenciarUsuarios && <button onClick={() => { setAba('usuarios'); carregarUsuarios() }} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'usuarios' ? 'bg-orange-600' : 'bg-gray-800 hover:bg-gray-700'}`}>?? Usu�rios</button>}
+          {pode.gerenciarUsuarios && <button onClick={() => { setAba('usuarios'); carregarUsuarios() }} className={`px-6 py-2 rounded-lg font-bold transition ${aba === 'usuarios' ? 'bg-orange-600' : 'bg-gray-800 hover:bg-gray-700'}`}> Usuarios</button>}
         </div>
 
         {/* Aba Cameras */}
@@ -468,9 +468,9 @@ export default function Dashboard() {
           <div className={`grid gap-8 ${pode.cadastrarCamera ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {pode.cadastrarCamera && (
               <div className="bg-gray-800 rounded-xl p-6">
-                <h2 className="text-xl font-bold mb-4">Cadastrar C�mera</h2>
+                <h2 className="text-xl font-bold mb-4">Cadastrar Camera</h2>
                 <div className="space-y-3">
-                  <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Nome da c�mera" value={nomeCamera} onChange={e => setNomeCamera(e.target.value)} />
+                  <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Nome da camera" value={nomeCamera} onChange={e => setNomeCamera(e.target.value)} />
                   <select className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={marca} onChange={e => onMarcaChange(e.target.value)}>
                     <option value="">Selecione a marca</option>
                     {Object.entries(MARCAS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -482,7 +482,7 @@ export default function Dashboard() {
                         <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Porta" value={camPorta} onChange={e => { setCamPorta(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usu�rio" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
+                        <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Usuario" value={camUsuario} onChange={e => { setCamUsuario(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                         <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm" placeholder="Senha" type="password" value={camSenha} onChange={e => { setCamSenha(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                       </div>
                       <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm w-full" placeholder="Canal (ex: 1)" value={camCanal} onChange={e => { setCamCanal(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
@@ -496,8 +496,8 @@ export default function Dashboard() {
                   )}
                   <div>
                     <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono" placeholder="URL RTSP" value={rtspUrl} onChange={e => setRtspUrl(e.target.value)} />
-                    {rtspUrl && <p className="text-green-400 text-xs mt-1 px-1">? URL RTSP pronta</p>}
-                    {httpUrl && <><input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono mt-2" placeholder="URL HTTP ao vivo" value={httpUrl} onChange={e => setHttpUrl(e.target.value)} /><p className="text-blue-400 text-xs mt-1 px-1">?? URL HTTP ao vivo pronta</p></>}
+                    {rtspUrl && <p className="text-green-400 text-xs mt-1 px-1">OK URL RTSP pronta</p>}
+                    {httpUrl && <><input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 text-sm font-mono mt-2" placeholder="URL HTTP ao vivo" value={httpUrl} onChange={e => setHttpUrl(e.target.value)} /><p className="text-blue-400 text-xs mt-1 px-1">? URL HTTP ao vivo pronta</p></>}
                   </div>
                   <select className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white" value={empresaId} onChange={e => setEmpresaId(e.target.value)}>
                     <option value="">Selecione a empresa</option>
@@ -505,15 +505,15 @@ export default function Dashboard() {
                   </select>
                   <button onClick={criarCamera} disabled={criando || !nomeCamera || !rtspUrl || !empresaId}
                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2">
-                    {criando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Cadastrando...</> : '+ Cadastrar C�mera'}
+                    {criando ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Cadastrando...</> : '+ Cadastrar Camera'}
                   </button>
                 </div>
               </div>
             )}
 
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">C�meras Cadastradas</h2>
-              {cameras.length === 0 ? <p className="text-gray-400">Nenhuma c�mera cadastrada ainda.</p> : (
+              <h2 className="text-xl font-bold mb-4">Cameras Cadastradas</h2>
+              {cameras.length === 0 ? <p className="text-gray-400">Nenhuma camera cadastrada ainda.</p> : (
                 <div className="space-y-3">
                   {cameras.map(c => (
                     <div key={c.id} className="bg-gray-700 rounded-lg p-3">
@@ -521,15 +521,15 @@ export default function Dashboard() {
                         <span className="font-bold">{c.nome}</span>
                         <div className="flex items-center gap-2">
                           <span className={`text-xs px-2 py-1 rounded-full ${c.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>{c.ativo ? 'Ativa' : 'Inativa'}</span>
-                          {pode.editarCamera && <button onClick={() => setCameraParaEditar(c)} className="text-gray-400 hover:text-blue-400 transition text-lg">??</button>}
-                          {pode.deletarCamera && <button onClick={() => setCameraParaDeletar(c)} className="text-gray-400 hover:text-red-400 transition text-lg">???</button>}
+                          {pode.editarCamera && <button onClick={() => setCameraParaEditar(c)} className="text-gray-400 hover:text-blue-400 transition text-lg">Editar</button>}
+                          {pode.deletarCamera && <button onClick={() => setCameraParaDeletar(c)} className="text-gray-400 hover:text-red-400 transition text-lg">Excluir</button>}
                         </div>
                       </div>
                       <p className="text-gray-400 text-sm mt-1 truncate">{c.rtsp_url}</p>
                       <p className="text-gray-500 text-xs mt-1 font-mono">{c.id}</p>
                       {pode.editarCamera && (
                         <div className="flex items-center gap-2 mt-2">
-                          <span className="text-gray-400 text-xs">?? Alerta banheiro:</span>
+                          <span className="text-gray-400 text-xs"> Alerta banheiro:</span>
                           <input type="number" min={1} max={120} value={temposBanheiro[c.id] ?? 30} onChange={e => setTemposBanheiro(prev => ({ ...prev, [c.id]: Number(e.target.value) }))} className="w-16 bg-gray-600 rounded px-2 py-1 text-white text-xs text-center" />
                           <span className="text-gray-400 text-xs">min</span>
                           <button onClick={() => salvarTempoBanheiro(c.id, temposBanheiro[c.id] ?? 30)} disabled={salvandoTempo === c.id} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-xs px-2 py-1 rounded transition">
@@ -557,7 +557,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Empresas Cadastradas ?</h2>
+              <h2 className="text-xl font-bold mb-4">Empresas Cadastradas</h2>
               {empresas.length === 0 ? <p className="text-gray-400">Nenhuma empresa cadastrada ainda.</p> : (
                 <div className="space-y-3">
                   {empresas.map(e => (
@@ -568,7 +568,7 @@ export default function Dashboard() {
                           <input className="w-full bg-gray-600 rounded-lg px-3 py-1.5 text-white text-sm" value={emailEmpresaEdit} onChange={ev => setEmailEmpresaEdit(ev.target.value)} />
                           <div className="flex gap-2">
                             <button onClick={editarEmpresa} disabled={editandoEmpresa} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded-lg transition font-bold">
-                              {editandoEmpresa ? '...' : '?? Salvar'}
+                              {editandoEmpresa ? '...' : ' Salvar'}
                             </button>
                             <button onClick={() => setEmpresaParaEditar(null)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white text-xs py-1.5 rounded-lg transition">Cancelar</button>
                           </div>
@@ -581,9 +581,9 @@ export default function Dashboard() {
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => { setEmpresaParaEditar(e); setNomeEmpresaEdit(e.nome); setEmailEmpresaEdit(e.email) }}
-                              className="text-gray-400 hover:text-blue-400 transition text-lg" title="Editar">??</button>
+                              className="text-gray-400 hover:text-blue-400 transition text-lg" title="Editar">Editar</button>
                             <button onClick={() => deletarEmpresa(e.id)}
-                              className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar">???</button>
+                              className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar">Excluir</button>
                           </div>
                         </div>
                       )}
@@ -595,13 +595,13 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Aba Usu�rios � s� admin */}
+        {/* Aba Usuarios - so admin */}
         {aba === 'usuarios' && pode.gerenciarUsuarios && (
           <div className="grid grid-cols-2 gap-8">
-            {/* Formul�rio novo usu�rio */}
+            {/* Formulario novo usuario */}
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">?? Criar Usu�rio</h2>
-              {erroUser && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">? {erroUser}</div>}
+              <h2 className="text-xl font-bold mb-4"> Criar Usuario</h2>
+              {erroUser && <div className="bg-red-900/40 border border-red-500 rounded-lg p-2 mb-3 text-red-300 text-sm">! {erroUser}</div>}
               <div className="space-y-3">
                 <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Nome completo" value={novoNome} onChange={e => setNovoNome(e.target.value)} />
                 <input className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400" placeholder="Email" type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} />
@@ -618,23 +618,23 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <div className="mt-2 p-2 bg-gray-900 rounded-lg text-xs text-gray-400">
-                    {novoPerfil === 'admin' && '?? Acesso total � pode cadastrar c�meras, usu�rios e empresas'}
-                    {novoPerfil === 'gestor' && '?? V� tudo incluindo heatmap e contagem, mas n�o edita'}
-                    {novoPerfil === 'cuidador' && '??? V� c�meras, eventos e h�bitos'}
-                    {novoPerfil === 'familiar' && '?? Acesso b�sico � c�meras, eventos e h�bitos'}
+                    {novoPerfil === 'admin' && ' Acesso total - pode cadastrar cameras, usuarios e empresas'}
+                    {novoPerfil === 'gestor' && ' Ve tudo incluindo heatmap e contagem, mas nao edita'}
+                    {novoPerfil === 'cuidador' && ' Ve cameras, eventos e habitos'}
+                    {novoPerfil === 'familiar' && ' Acesso basico - cameras, eventos e habitos'}
                   </div>
                 </div>
                 <button onClick={criarUsuario} disabled={criandoUser || !novoNome || !novoEmail || !novaSenha}
                   className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-bold transition flex items-center justify-center gap-2">
-                  {criandoUser ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Criando...</> : '+ Criar Usu�rio'}
+                  {criandoUser ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Criando...</> : '+ Criar Usuario'}
                 </button>
               </div>
             </div>
 
-            {/* Lista de usu�rios */}
+            {/* Lista de usuarios */}
             <div className="bg-gray-800 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Usu�rios da Empresa</h2>
-              {usuarios.length === 0 ? <p className="text-gray-400">Nenhum usu�rio encontrado.</p> : (
+              <h2 className="text-xl font-bold mb-4">Usuarios da Empresa</h2>
+              {usuarios.length === 0 ? <p className="text-gray-400">Nenhum usuario encontrado.</p> : (
                 <div className="space-y-3">
                   {usuarios.map(u => (
                     <div key={u.id} className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
@@ -646,7 +646,7 @@ export default function Dashboard() {
                         <p className="text-gray-400 text-sm">{u.email}</p>
                       </div>
                       {u.id !== usuario?.id && (
-                        <button onClick={() => deletarUsuarioItem(u.id)} className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar usu�rio">???</button>
+                        <button onClick={() => deletarUsuarioItem(u.id)} className="text-gray-400 hover:text-red-400 transition text-lg" title="Deletar usuario">Excluir</button>
                       )}
                     </div>
                   ))}
