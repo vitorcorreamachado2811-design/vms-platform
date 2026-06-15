@@ -118,8 +118,9 @@ function Toggle({ ativo, onChange }: { ativo: boolean; onChange: () => void }) {
   )
 }
 
-function CameraPlayer({ camera }: { camera: Camera }) {
-  const [aoVivo, setAoVivo]           = useState(false)
+function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: Camera, cameraAoVivoId: string | null, setCameraAoVivoId: (id: string | null) => void }) {
+  const aoVivo = cameraAoVivoId === camera.id
+  function setAoVivo(v: boolean) { setCameraAoVivoId(v ? camera.id : null) }
   const [bufA, setBufA]               = useState<string>('')
   const [bufB, setBufB]               = useState<string>('')
   const [ativo, setAtivo]             = useState<'A' | 'B'>('A')
@@ -458,6 +459,7 @@ export default function CamerasPage() {
   const { usuario } = useAuth()
   const [cameras, setCameras]       = useState<Camera[]>([])
   const [carregando, setCarregando] = useState(true)
+  const [cameraAoVivoId, setCameraAoVivoId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!usuario) return
