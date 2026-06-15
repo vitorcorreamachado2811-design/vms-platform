@@ -62,20 +62,16 @@ _ultimo_publish: dict = {}   # {camera_id: timestamp}
 PUBLISH_INTERVALO = 0.1      # 10fps = a cada 100ms
 
 def publish_live_frame(camera_id: str, frame):
-    """Faz upload do frame reduzido como JPEG para o Supabase CDN (ao vivo)."""
+    """Envia frame JPEG para o backend Railway (sem custo de storage)."""
     try:
         frame_pequeno = cv2.resize(frame, (640, 360))
         _, buffer = cv2.imencode('.jpg', frame_pequeno, [cv2.IMWRITE_JPEG_QUALITY, 60])
         jpg_bytes = buffer.tobytes()
-        supabase = get_supabase()
-        supabase.storage.from_(LIVE_BUCKET).upload(
-            f"live/{camera_id}.jpg",
-            jpg_bytes,
-            file_options={
-                "content-type": "image/jpeg",
-                "upsert": "true",
-                "cache-control": "no-cache, no-store, max-age=0"
-            }
+        requests.post(
+            f"{API_BASE}/cameras/{camera_id}/frame",
+            data=jpg_bytes,
+            headers={"Content-Type": "image/jpeg"},
+            timeout=2
         )
     except Exception as e:
         print(f"[LIVE] Erro publish {camera_id}: {e}", flush=True)
