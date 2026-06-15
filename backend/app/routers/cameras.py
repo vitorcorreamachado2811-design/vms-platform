@@ -1,19 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, Response, StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from pydantic import BaseModel
-from typing import Optional
-from uuid import UUID
-import uuid
-import subprocess
-import os
-import threading
-import time
-
-from app.database import get_db
-from app.models.models import Camera
-
+﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 router = APIRouter()
 
 processos_ffmpeg: dict[str, subprocess.Popen] = {}
@@ -83,7 +68,7 @@ def listar_cameras(empresa_id: Optional[str] = None, db: Session = Depends(get_d
     query = db.query(Camera)
     if empresa_id:
         query = query.filter(Camera.empresa_id == empresa_id)
-    cameras = query.all()
+    
     for c in cameras:
         if c.ativo and c.http_url:
             iniciar_http_cache(str(c.id), c.http_url)
@@ -100,7 +85,27 @@ def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     )
     db.add(nova)
     db.commit()
-    db.refresh(nova)
+    db.refresh(nova)# Store de frames ao vivo em memoria
+_frames_live: dict[str, bytes] = {}
+_frames_ts: dict[str, float] = {}
+
+@router.post("/{camera_id}/frame")
+async def receber_frame(camera_id: str, request: Request):
+    body = await request.body()
+    if body:
+        _frames_live[camera_id] = body
+        _frames_ts[camera_id] = time.time()
+    return {"ok": True}
+
+@router.get("/{camera_id}/frame")
+def obter_frame(camera_id: str):
+    frame = _frames_live.get(camera_id)
+    if not frame:
+        raise HTTPException(status_code=404, detail="Sem frame")
+    return Response(content=frame, media_type="image/jpeg", headers={
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "X-Frame-Timestamp": str(_frames_ts.get(camera_id, 0))
+    })
     return nova
 class CameraUpdate(BaseModel):
     nome: Optional[str] = None
