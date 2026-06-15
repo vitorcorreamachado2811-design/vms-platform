@@ -1,4 +1,16 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+﻿from fastapi.responses import FileResponse, Response, StreamingResponse
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+import uuid
+import subprocess
+import os
+import threading
+import time
+from app.database import get_db
+from app.models.models import Camerafrom fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 router = APIRouter()
 
 processos_ffmpeg: dict[str, subprocess.Popen] = {}
@@ -105,8 +117,7 @@ def obter_frame(camera_id: str):
     return Response(content=frame, media_type="image/jpeg", headers={
         "Cache-Control": "no-cache, no-store, max-age=0",
         "X-Frame-Timestamp": str(_frames_ts.get(camera_id, 0))
-    })
-    return nova
+    })git add backend/app/routers/cameras.py
 class CameraUpdate(BaseModel):
     nome: Optional[str] = None
     rtsp_url: Optional[str] = None
