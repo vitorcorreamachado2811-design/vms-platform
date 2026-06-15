@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -240,6 +240,42 @@ def live_frame(camera_id: UUID, db: Session = Depends(get_db)):
                        headers={"Cache-Control": "no-cache"})
     raise HTTPException(status_code=503, detail="Frame nao disponivel ainda")
 
+# Adicionar no cameras.py — endpoint HLS
+
+import glob
+
+@router.get("/{camera_id}/hls/index.m3u8")
+def hls_playlist(camera_id: str):
+    """Serve o playlist HLS gerado pelo worker."""
+    path = f"/tmp/hls/{camera_id}/index.m3u8"
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="HLS nao iniciado")
+    content = open(path).read()
+    return Response(
+        content=content,
+        media_type="application/vnd.apple.mpegurl",
+        headers={
+            "Cache-Control": "no-cache, no-store",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
+
+@router.get("/{camera_id}/hls/{segment}")
+def hls_segment(camera_id: str, segment: str):
+    """Serve segmentos .ts do HLS."""
+    if not segment.endswith(".ts"):
+        raise HTTPException(status_code=400, detail="Segmento invalido")
+    path = f"/tmp/hls/{camera_id}/{segment}"
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Segmento nao encontrado")
+    return Response(
+        content=open(path, "rb").read(),
+        media_type="video/mp2t",
+        headers={
+            "Cache-Control": "no-cache",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
 
 @router.get("/{camera_id}/snapshot")
 def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
