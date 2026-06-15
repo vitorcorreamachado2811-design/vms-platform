@@ -1,4 +1,4 @@
-﻿'use client'
+ï»¿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -48,13 +48,13 @@ const ANALITICOS_DEFAULT: Analiticos = {
 }
 
 const ANALITICOS_INFO: { key: keyof Analiticos; label: string; icon: string; cor: string }[] = [
-  { key: 'queda_leito',    label: 'Queda do Leito',    icon: 'ðŸ›ï¸', cor: '#EF4444' },
-  { key: 'queda_pe',       label: 'Queda em PÃ©',       icon: 'ðŸš¨', cor: '#F97316' },
-  { key: 'pessoa',         label: 'Pessoa Detectada',  icon: 'ðŸ‘¤', cor: '#3B82F6' },
-  { key: 'banheiro_tempo', label: 'Banheiro (tempo)',  icon: 'ðŸš¿', cor: '#8B5CF6' },
-  { key: 'gesto_socorro',  label: 'Gesto de Socorro',  icon: 'ðŸ™‹', cor: '#EC4899' },
-  { key: 'linha_contagem', label: 'Linha de Contagem', icon: 'â†”ï¸', cor: '#10B981' },
-  { key: 'habitos',        label: 'HÃ¡bitos',           icon: 'ðŸ“Š', cor: '#F59E0B' },
+  { key: 'queda_leito',    label: 'Queda do Leito',    icon: 'Ã°Å¸â€ºÂ�Ã¯Â¸Â�', cor: '#EF4444' },
+  { key: 'queda_pe',       label: 'Queda em PÃƒÂ©',       icon: 'Ã°Å¸Å¡Â¨', cor: '#F97316' },
+  { key: 'pessoa',         label: 'Pessoa Detectada',  icon: 'Ã°Å¸â€˜Â¤', cor: '#3B82F6' },
+  { key: 'banheiro_tempo', label: 'Banheiro (tempo)',  icon: 'Ã°Å¸Å¡Â¿', cor: '#8B5CF6' },
+  { key: 'gesto_socorro',  label: 'Gesto de Socorro',  icon: 'Ã°Å¸â„¢â€¹', cor: '#EC4899' },
+  { key: 'linha_contagem', label: 'Linha de Contagem', icon: 'Ã¢â€ â€�Ã¯Â¸Â�', cor: '#10B981' },
+  { key: 'habitos',        label: 'HÃƒÂ¡bitos',           icon: 'Ã°Å¸â€œÅ ', cor: '#F59E0B' },
 ]
 
 const ANALITICO_REGIOES: Partial<Record<keyof Analiticos, string[]>> = {
@@ -253,7 +253,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
       })
       const salva = await res.json()
       setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), salva])
-    } catch { setErro('Erro ao salvar regiÃ£o') }
+    } catch { setErro('Erro ao salvar regiÃƒÂ£o') }
   }
 
   async function deletarRegiao(tipo: string) {
@@ -281,7 +281,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
 
         {!bufA && !bufB && (
           <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            <div className="text-center"><div className="text-4xl mb-2">ðŸ“·</div><p className="text-sm">Sem sinal</p></div>
+            <div className="text-center"><div className="text-4xl mb-2">Ã°Å¸â€œÂ·</div><p className="text-sm">Sem sinal</p></div>
           </div>
         )}
 
@@ -313,7 +313,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
           {modoDesenho && tipoSelecionado && tipoSelecionado !== 'linha' && (
             <span className="text-white text-xs px-2 py-1 rounded-full font-bold"
               style={{ backgroundColor: (CORES_REGIAO[tipoSelecionado]||'#8B5CF6')+'CC' }}>
-              âœï¸ {tipoSelecionado.toUpperCase()}
+              Ã¢Å“Â�Ã¯Â¸Â� {tipoSelecionado.toUpperCase()}
             </span>
           )}
         </div>
@@ -322,7 +322,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
           <button onClick={() => { setErro(null); setAoVivo(true) }}
             className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition group">
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center group-hover:scale-110 transition">
-              <span className="text-2xl ml-1">â–¶</span>
+              <span className="text-2xl ml-1">Ã¢â€“Â¶</span>
             </div>
           </button>
         )}
@@ -336,23 +336,23 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
           </span>
         </div>
 
-        {erro && <p className="text-red-400 text-xs mb-3">âš  {erro}</p>}
+        {erro && <p className="text-red-400 text-xs mb-3">Ã¢Å¡Â  {erro}</p>}
 
         <div className="flex gap-2 mb-3">
           {aoVivo ? (
             <button onClick={() => { setAoVivo(false); if (intervalRef.current) clearInterval(intervalRef.current) }}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm py-2 rounded-lg font-bold transition">
-              â¹ Parar
+              Ã¢Â�Â¹ Parar
             </button>
           ) : (
             <button onClick={() => { setErro(null); setAoVivo(true) }}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg font-bold transition">
-              â–¶ Ao Vivo
+              Ã¢â€“Â¶ Ao Vivo
             </button>
           )}
           <button onClick={() => { const url = `${liveUrl(camera.id)}?t=${Date.now()}`; setBufA(url); setAtivo('A') }}
             className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition" title="Atualizar">
-            ðŸ”„
+            Ã°Å¸â€�â€ž
           </button>
           <button
             onClick={() => {
@@ -363,13 +363,13 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
             }}
             className={`text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'regioes' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'}`}
           >
-            âœï¸
+            Ã¢Å“Â�Ã¯Â¸Â�
           </button>
           <button
             onClick={() => setAbaAtiva(v => v === 'analiticos' ? null : 'analiticos')}
             className={`relative text-white text-sm px-3 py-2 rounded-lg transition font-bold ${abaAtiva === 'analiticos' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
           >
-            ðŸ§ 
+            Ã°Å¸Â§Â 
             <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
               {ativos}
             </span>
@@ -378,11 +378,11 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
 
         {abaAtiva === 'regioes' && (
           <div className="bg-gray-900 rounded-lg p-3">
-            <p className="text-gray-400 text-xs mb-2 font-bold">REGIÃ•ES DE IA â€” clique e arraste na imagem</p>
+            <p className="text-gray-400 text-xs mb-2 font-bold">REGIÃƒâ€¢ES DE IA Ã¢â‚¬â€� clique e arraste na imagem</p>
             {!carregouAnaliticos ? (
               <p className="text-gray-500 text-xs">Carregando...</p>
             ) : tiposLiberados.length === 0 ? (
-              <p className="text-yellow-500 text-xs">Ative ao menos um analÃ­tico com regiÃ£o no painel ðŸ§ </p>
+              <p className="text-yellow-500 text-xs">Ative ao menos um analÃƒÂ­tico com regiÃƒÂ£o no painel Ã°Å¸Â§Â </p>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-2 mb-3">
@@ -395,13 +395,13 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
                         backgroundColor: (CORES_REGIAO[tipo]||'#fff')+'CC',
                         borderColor: CORES_REGIAO[tipo]||'#fff'
                       } : {}}>
-                      {tipo.toUpperCase()}{regioes.find(r => r.tipo === tipo) ? ' âœ“' : ''}
+                      {tipo.toUpperCase()}{regioes.find(r => r.tipo === tipo) ? ' Ã¢Å“â€œ' : ''}
                     </button>
                   ))}
                 </div>
                 {tiposLiberados.includes('linha') && (
                   <div className="mb-2 p-2 rounded-lg border border-green-700 bg-green-900/20">
-                    <p className="text-green-400 text-xs font-bold">â†”ï¸ Linha de Contagem</p>
+                    <p className="text-green-400 text-xs font-bold">Ã¢â€ â€�Ã¯Â¸Â� Linha de Contagem</p>
                     <p className="text-gray-400 text-xs mt-0.5">Configure em <Link href="/contagem" className="underline text-green-400">Contagem</Link></p>
                   </div>
                 )}
@@ -409,8 +409,8 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
                   <div className="space-y-1 mt-2">
                     {regioesVisiveis.map(r => (
                       <div key={r.tipo} className="flex items-center justify-between text-xs">
-                        <span style={{ color: CORES_REGIAO[r.tipo]||'#fff' }} className="font-bold">â–  {r.tipo.toUpperCase()}</span>
-                        <button onClick={() => deletarRegiao(r.tipo)} className="text-red-400 hover:text-red-300 transition">ðŸ—‘ remover</button>
+                        <span style={{ color: CORES_REGIAO[r.tipo]||'#fff' }} className="font-bold">Ã¢â€“Â  {r.tipo.toUpperCase()}</span>
+                        <button onClick={() => deletarRegiao(r.tipo)} className="text-red-400 hover:text-red-300 transition">Ã°Å¸â€”â€˜ remover</button>
                       </div>
                     ))}
                   </div>
@@ -423,7 +423,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
         {abaAtiva === 'analiticos' && (
           <div className="bg-gray-900 rounded-lg p-3">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-gray-400 text-xs font-bold">ANALÃTICOS DE IA</p>
+              <p className="text-gray-400 text-xs font-bold">ANALÃƒÂ�TICOS DE IA</p>
               {salvando && <span className="text-xs text-gray-500 animate-pulse">Salvando...</span>}
             </div>
             <div className="space-y-2">
@@ -439,7 +439,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
                           style={{ backgroundColor: cor + '33', color: cor }}>ON</span>
                       )}
                       {analiticos[key] && temRegiao && (
-                        <span className="text-xs text-gray-500">âœï¸</span>
+                        <span className="text-xs text-gray-500">Ã¢Å“Â�Ã¯Â¸Â�</span>
                       )}
                     </div>
                     <Toggle ativo={analiticos[key]} onChange={() => toggleAnalitico(key)} />
@@ -447,7 +447,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: { camera: C
                 )
               })}
             </div>
-            <p className="text-gray-600 text-xs mt-3">âœï¸ = possui regiÃ£o de IA configurÃ¡vel</p>
+            <p className="text-gray-600 text-xs mt-3">Ã¢Å“Â�Ã¯Â¸Â� = possui regiÃƒÂ£o de IA configurÃƒÂ¡vel</p>
           </div>
         )}
       </div>
@@ -474,12 +474,12 @@ export default function CamerasPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-blue-400">CÃ¢meras ao Vivo</h1>
-            <p className="text-gray-400 mt-1">{cameras.length} cÃ¢mera{cameras.length !== 1 ? 's' : ''} cadastrada{cameras.length !== 1 ? 's' : ''}</p>
+            <h1 className="text-3xl font-bold text-blue-400">CÃƒÂ¢meras ao Vivo</h1>
+            <p className="text-gray-400 mt-1">{cameras.length} cÃƒÂ¢mera{cameras.length !== 1 ? 's' : ''} cadastrada{cameras.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex gap-3">
-            <Link href="/eventos" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">âš¡ Eventos</Link>
-            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">â† Dashboard</Link>
+            <Link href="/eventos" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">Ã¢Å¡Â¡ Eventos</Link>
+            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">Ã¢â€ Â� Dashboard</Link>
           </div>
         </div>
 
@@ -489,9 +489,9 @@ export default function CamerasPage() {
           </div>
         ) : cameras.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
-            <div className="text-5xl mb-4">ðŸ“·</div>
-            <p className="text-xl">Nenhuma cÃ¢mera cadastrada</p>
-            <Link href="/" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">+ Adicionar cÃ¢mera</Link>
+            <div className="text-5xl mb-4">Ã°Å¸â€œÂ·</div>
+            <p className="text-xl">Nenhuma cÃƒÂ¢mera cadastrada</p>
+            <Link href="/" className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold transition">+ Adicionar cÃƒÂ¢mera</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
