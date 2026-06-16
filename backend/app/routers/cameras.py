@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -10,6 +10,8 @@ import subprocess
 import os
 import threading
 import time
+import asyncio
+import io
 from app.database import get_db
 from app.models.models import Camera
 
@@ -59,6 +61,45 @@ def iniciar_http_cache(camera_id: str, http_url: str):
         _http_cache[camera_id] = {"ativo": True, "data": None, "ts": 0}
     t = threading.Thread(target=_worker_http_cache, args=(camera_id, http_url), daemon=True)
     t.start()
+
+
+def _make_no_signal_frame(camera_id: str) -> bytes:
+    """Gera frame JPEG de sem sinal sem dependencias externas."""
+    try:
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (1280, 720), color=(12, 12, 18))
+        draw = ImageDraw.Draw(img)
+        cx, cy = 640, 300
+        # Icone camera
+        draw.rounded_rectangle([cx-70, cy-45, cx+70, cy+45], radius=10, outline=(70, 70, 90), width=3)
+        draw.ellipse([cx-28, cy-28, cx+28, cy+28], outline=(70, 70, 90), width=3)
+        draw.polygon([(cx+52, cy-50), (cx+90, cy-65), (cx+90, cy+65), (cx+52, cy+50)], outline=(70, 70, 90))
+        # Linha diagonal vermelha
+        draw.line([cx-90, cy-65, cx+90, cy+65], fill=(160, 40, 40), width=4)
+        # Textos
+        draw.text((640, 400), "Sem sinal", fill=(190, 190, 205), anchor="mm", font_size=30)
+        draw.text((640, 442), camera_id.replace("-", " ").title(), fill=(110, 110, 130), anchor="mm", font_size=18)
+        draw.text((640, 478), time.strftime("%H:%M:%S"), fill=(70, 70, 90), anchor="mm", font_size=14)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        return buf.getvalue()
+    except Exception:
+        # Fallback: JPEG minimo valido (1x1 preto) caso Pillow nao esteja instalado
+        return (
+            b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+            b"\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t"
+            b"\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a"
+            b"\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444\x1f'9=82<.342\x1e"
+            b"\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00"
+            b"\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00"
+            b"\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b"
+            b"\xff\xc4\x00\xb5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04"
+            b"\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa"
+            b"\x07\"q\x142\x81\x91\xa1\x08#B\xb1\xc1\x15R\xd1\xf0$3br"
+            b"\x82\t\n\x16\x17\x18\x19\x1a%&'()*456789:CDEFGHIJ"
+            b"STUVWXYZ\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xfb\xd0"
+            b"\xff\xd9"
+        )
 
 
 class CameraCreate(BaseModel):
@@ -210,6 +251,113 @@ def obter_frame(camera_id: str):
     )
 
 
+# -- MJPEG STREAM DIRETO --
+
+@router.get("/{camera_id}/mjpeg")
+async def mjpeg_stream(camera_id: str, db: Session = Depends(get_db)):
+    """
+    MJPEG stream: uma conexao HTTP continua, frames empurrados pelo servidor.
+    Frontend usa <img src=".../mjpeg"> nativo — sem polling, sem JS, delay zero.
+    Se o RTSP cair, empurra frame de 'Sem sinal' e tenta reconectar automaticamente.
+    """
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera nao encontrada")
+
+    rtsp_url = camera.rtsp_url
+
+    return StreamingResponse(
+        _gerar_mjpeg(rtsp_url, camera_id),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
+
+
+async def _gerar_mjpeg(rtsp_url: str, camera_id: str):
+    """
+    Generator assincrono. Roda ffmpeg, extrai frames JPEG do stdout
+    e os empurra no formato multipart/x-mixed-replace.
+    Reconecta automaticamente se o RTSP cair.
+    """
+    BOUNDARY = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+    TAIL = b"\r\n"
+    SOI = b"\xff\xd8"
+    EOI = b"\xff\xd9"
+
+    while True:
+        proc = None
+        try:
+            cmd = [
+                "ffmpeg",
+                "-loglevel", "error",
+                "-rtsp_transport", "tcp",
+                "-i", rtsp_url,
+                "-f", "image2pipe",
+                "-vf", "scale=1280:720",
+                "-vcodec", "mjpeg",
+                "-q:v", "5",
+                "-r", "15",
+                "-"
+            ]
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+
+            buffer = b""
+
+            while True:
+                chunk = await proc.stdout.read(65536)
+                if not chunk:
+                    break
+
+                buffer += chunk
+
+                while True:
+                    start = buffer.find(SOI)
+                    if start == -1:
+                        buffer = b""
+                        break
+
+                    end = buffer.find(EOI, start)
+                    if end == -1:
+                        buffer = buffer[start:]
+                        break
+
+                    frame = buffer[start:end + 2]
+                    buffer = buffer[end + 2:]
+
+                    yield BOUNDARY + frame + TAIL
+                    await asyncio.sleep(0)
+
+        except asyncio.CancelledError:
+            # Cliente desconectou — encerra limpo
+            break
+        except Exception as e:
+            print(f"[MJPEG] Erro {camera_id}: {e}", flush=True)
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+
+        # RTSP caiu: empurra frame de sem sinal por 3s antes de reconectar
+        no_signal = _make_no_signal_frame(camera_id)
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            yield BOUNDARY + no_signal + TAIL
+            await asyncio.sleep(0.5)
+
+
 # -- SNAPSHOT e LIVE legados --
 
 @router.get("/{camera_id}/live")
@@ -240,7 +388,6 @@ def live_frame(camera_id: UUID, db: Session = Depends(get_db)):
                        headers={"Cache-Control": "no-cache"})
     raise HTTPException(status_code=503, detail="Frame nao disponivel ainda")
 
-# Adicionar no cameras.py — endpoint HLS
 
 import glob
 

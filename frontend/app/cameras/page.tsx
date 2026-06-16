@@ -32,8 +32,8 @@ const ANALITICOS_DEFAULT: Analiticos = {
   linha_contagem: false, habitos: false,
 }
 
-function liveUrl(cameraId: string) {
-  return `${API}/cameras/${cameraId}/frame`
+function mjpegUrl(cameraId: string) {
+  return `${API}/cameras/${cameraId}/mjpeg`
 }
 
 async function carregarAnaliticos(cameraId: string): Promise<Analiticos> {
@@ -125,33 +125,129 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
   )
 }
 
+// Player MJPEG — usa <img> nativa, 1 conexao continua, delay zero
+function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [status, setStatus] = useState<'connecting' | 'live' | 'error'>('connecting')
+  const reconnectRef = useRef<NodeJS.Timeout | null>(null)
+
+  const url = mjpegUrl(camera.id)
+
+  function conectar() {
+    if (!imgRef.current) return
+    setStatus('connecting')
+    // Adiciona timestamp para forcar nova conexao na reconexao
+    imgRef.current.src = `${url}?t=${Date.now()}`
+  }
+
+  useEffect(() => {
+    conectar()
+    return () => {
+      // Ao desmontar, para o stream limpando o src
+      if (imgRef.current) imgRef.current.src = ''
+      if (reconnectRef.current) clearTimeout(reconnectRef.current)
+    }
+  }, [camera.id])
+
+  function handleLoad() {
+    setStatus('live')
+    if (reconnectRef.current) clearTimeout(reconnectRef.current)
+  }
+
+  function handleError() {
+    setStatus('error')
+    // Tenta reconectar apos 3s
+    reconnectRef.current = setTimeout(() => conectar(), 3000)
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)',
+      zIndex: 9999, display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 16px', background: 'rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            background: status === 'live' ? '#22c55e' : status === 'connecting' ? '#f59e0b' : '#ef4444',
+            boxShadow: status === 'live' ? '0 0 0 3px rgba(34,197,94,0.25)' : 'none',
+          }} />
+          <span style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>{camera.nome}</span>
+          {status === 'live' && (
+            <span style={{
+              background: '#dc2626', color: '#fff', fontSize: 10,
+              fontWeight: 700, padding: '2px 7px', borderRadius: 4, letterSpacing: 1,
+            }}>AO VIVO</span>
+          )}
+          {status === 'connecting' && (
+            <span style={{ color: '#9ca3af', fontSize: 12 }}>Conectando...</span>
+          )}
+          {status === 'error' && (
+            <span style={{ color: '#fca5a5', fontSize: 12 }}>Reconectando em 3s...</span>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+            fontSize: 20, width: 36, height: 36, borderRadius: 8,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          x
+        </button>
+      </div>
+
+      {/* Stream — tag img nativa, browser decodifica MJPEG automaticamente */}
+      <div style={{ flex: 1, position: 'relative', background: '#000' }}>
+        <img
+          ref={imgRef}
+          onLoad={handleLoad}
+          onError={handleError}
+          alt={camera.nome}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+        />
+
+        {/* Overlay enquanto conecta */}
+        {status !== 'live' && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.55)', gap: 14,
+          }}>
+            {status === 'connecting' ? (
+              <>
+                <div style={{
+                  width: 40, height: 40,
+                  border: '3px solid rgba(255,255,255,0.15)',
+                  borderTopColor: '#fff', borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                <span style={{ color: '#9ca3af', fontSize: 14 }}>Aguardando stream...</span>
+              </>
+            ) : (
+              <span style={{ color: '#fca5a5', fontSize: 14 }}>Sem sinal — reconectando...</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
   camera: Camera
   cameraAoVivoId: string | null
   setCameraAoVivoId: (id: string | null) => void
 }) {
   const aoVivo = cameraAoVivoId === camera.id
-  function setAoVivo(v: boolean) { setCameraAoVivoId(v ? camera.id : null) }
-
-  const [bufA, setBufA] = useState<string>('')
-  const [bufB, setBufB] = useState<string>('')
-  const [ativo, setAtivo] = useState<'A' | 'B'>('A')
   const [showAnaliticos, setShowAnaliticos] = useState(false)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
-
-  useEffect(() => {
-    if (aoVivo) {
-      setBufA(`${liveUrl(camera.id)}?t=${Date.now()}`)
-      intervalRef.current = setInterval(() => {
-        const nextUrl = `${liveUrl(camera.id)}?t=${Date.now()}`
-        if (ativo === 'A') { setBufB(nextUrl); setAtivo('B') }
-        else { setBufA(nextUrl); setAtivo('A') }
-      }, 1000)
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [aoVivo, camera.id])
 
   const snapshotUrl = `${API}/cameras/${camera.id}/snapshot`
 
@@ -160,29 +256,32 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
       {showAnaliticos && (
         <PainelAnaliticos cameraId={camera.id} onClose={() => setShowAnaliticos(false)} />
       )}
+
+      {/* Modal MJPEG — renderiza fora do card, ocupa tela toda */}
+      {aoVivo && (
+        <MjpegPlayer
+          camera={camera}
+          onClose={() => setCameraAoVivoId(null)}
+        />
+      )}
+
       <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
-        {/* Video area */}
+        {/* Thumbnail / preview */}
         <div className="relative aspect-video bg-black">
-          {aoVivo ? (
-            <>
-              <img src={bufA} alt={camera.nome} className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${ativo === 'A' ? 'opacity-100' : 'opacity-0'}`} />
-              <img src={bufB} alt={camera.nome} className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${ativo === 'B' ? 'opacity-100' : 'opacity-0'}`} />
-              <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-red-600 rounded-full px-2 py-0.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                <span className="text-white text-xs font-bold">AO VIVO</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <img src={snapshotUrl} alt={camera.nome} className="w-full h-full object-cover opacity-60" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-              <button onClick={() => setAoVivo(true)}
-                className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition">
-                <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
-                  <span className="text-white text-2xl ml-1">&#9654;</span>
-                </div>
-              </button>
-            </>
-          )}
+          <img
+            src={snapshotUrl}
+            alt={camera.nome}
+            className="w-full h-full object-cover opacity-60"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+          <button
+            onClick={() => setCameraAoVivoId(camera.id)}
+            className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition"
+          >
+            <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-white text-2xl ml-1">&#9654;</span>
+            </div>
+          </button>
         </div>
 
         {/* Controls */}
@@ -194,28 +293,21 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {aoVivo ? (
-              <button onClick={() => setAoVivo(false)}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1">
-                <span>&#9632;</span> Parar
-              </button>
-            ) : (
-              <button onClick={() => setAoVivo(true)}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1">
-                <span>&#9654;</span> Ao Vivo
-              </button>
-            )}
+            <button
+              onClick={() => setCameraAoVivoId(camera.id)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1"
+            >
+              <span>&#9654;</span> Ao Vivo
+            </button>
             <BtnIcon onClick={() => {}} title="Regioes" className="bg-gray-700 hover:bg-gray-600 text-white">
               [R]
             </BtnIcon>
             <BtnIcon onClick={() => {}} title="Editar" className="bg-gray-700 hover:bg-gray-600 text-white">
               [E]
             </BtnIcon>
-            <div className="relative">
-              <BtnIcon onClick={() => setShowAnaliticos(true)} title="Analiticos IA" className="bg-gray-700 hover:bg-gray-600 text-purple-300">
-                IA
-              </BtnIcon>
-            </div>
+            <BtnIcon onClick={() => setShowAnaliticos(true)} title="Analiticos IA" className="bg-gray-700 hover:bg-gray-600 text-purple-300">
+              IA
+            </BtnIcon>
           </div>
         </div>
       </div>
