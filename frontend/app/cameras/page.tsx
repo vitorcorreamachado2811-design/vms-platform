@@ -26,11 +26,29 @@ interface Analiticos {
   habitos: boolean
 }
 
+interface Regiao {
+  id: string
+  camera_id: string
+  tipo: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  tempo_alerta_min: number
+}
+
 const ANALITICOS_DEFAULT: Analiticos = {
   queda_leito: false, queda_pe: false, pessoa: false,
   banheiro_tempo: false, gesto_socorro: false,
   linha_contagem: false, habitos: false,
 }
+
+const TIPOS_REGIAO = [
+  { key: 'cama',     label: 'Cama',     color: '#3b82f6' },
+  { key: 'banheiro', label: 'Banheiro', color: '#8b5cf6' },
+  { key: 'cozinha',  label: 'Cozinha',  color: '#f59e0b' },
+  { key: 'quarto',   label: 'Quarto',   color: '#10b981' },
+]
 
 function mjpegUrl(cameraId: string) {
   return `${API}/cameras/${cameraId}/mjpeg`
@@ -75,6 +93,298 @@ function BtnIcon({ onClick, title, children, className = '' }: {
   )
 }
 
+// ─── MODAL EDITAR CAMERA ────────────────────────────────────────────────────
+function ModalEditar({ camera, onClose, onSalvo }: {
+  camera: Camera
+  onClose: () => void
+  onSalvo: (c: Camera) => void
+}) {
+  const [nome, setNome] = useState(camera.nome)
+  const [rtsp, setRtsp] = useState(camera.rtsp_url)
+  const [httpUrl, setHttpUrl] = useState(camera.http_url || '')
+  const [ativo, setAtivo] = useState(camera.ativo)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function salvar() {
+    setSalvando(true)
+    setErro('')
+    try {
+      const res = await fetch(`${API}/cameras/${camera.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, rtsp_url: rtsp, http_url: httpUrl || null, ativo }),
+      })
+      if (!res.ok) throw new Error('Erro ao salvar')
+      const data = await res.json()
+      onSalvo(data)
+      onClose()
+    } catch (e: any) {
+      setErro(e.message || 'Erro desconhecido')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl p-5 max-w-sm w-full shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold text-lg">Editar Camera</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">Nome</label>
+            <input value={nome} onChange={e => setNome(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:border-blue-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">URL RTSP</label>
+            <input value={rtsp} onChange={e => setRtsp(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:border-blue-500 outline-none font-mono" />
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">URL HTTP (snapshot, opcional)</label>
+            <input value={httpUrl} onChange={e => setHttpUrl(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:border-blue-500 outline-none font-mono" />
+          </div>
+          <div className="flex items-center justify-between bg-gray-900 rounded-lg px-3 py-2">
+            <span className="text-gray-300 text-sm">Camera ativa</span>
+            <button onClick={() => setAtivo(v => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${ativo ? 'bg-green-600' : 'bg-gray-600'}`}>
+              <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${ativo ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+
+        {erro && <p className="text-red-400 text-xs mt-2">{erro}</p>}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold py-2 rounded-lg transition">
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={salvando}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold py-2 rounded-lg transition">
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MODAL REGIOES ───────────────────────────────────────────────────────────
+function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  const [regioes, setRegioes] = useState<Regiao[]>([])
+  const [tipoSelecionado, setTipoSelecionado] = useState('cama')
+  const [desenhando, setDesenhando] = useState(false)
+  const [inicio, setInicio] = useState<{ x: number; y: number } | null>(null)
+  const [atual, setAtual] = useState<{ x: number; y: number } | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const [imgCarregada, setImgCarregada] = useState(false)
+
+  const snapshotUrl = `${API}/cameras/${camera.id}/snapshot`
+
+  useEffect(() => {
+    fetch(`${API}/regioes/${camera.id}`)
+      .then(r => r.json())
+      .then(data => setRegioes(Array.isArray(data) ? data : []))
+      .catch(() => {})
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = snapshotUrl
+    img.onload = () => { imgRef.current = img; setImgCarregada(true) }
+    img.onerror = () => setImgCarregada(true)
+  }, [camera.id])
+
+  useEffect(() => {
+    desenharCanvas()
+  }, [regioes, atual, inicio, imgCarregada])
+
+  function desenharCanvas() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    if (imgRef.current) {
+      ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height)
+    } else {
+      ctx.fillStyle = '#111'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    }
+
+    // Desenha regioes salvas
+    regioes.forEach(r => {
+      const tipo = TIPOS_REGIAO.find(t => t.key === r.tipo)
+      const color = tipo?.color || '#fff'
+      const x = r.x1 * canvas.width
+      const y = r.y1 * canvas.height
+      const w = (r.x2 - r.x1) * canvas.width
+      const h = (r.y2 - r.y1) * canvas.height
+
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.setLineDash([])
+      ctx.strokeRect(x, y, w, h)
+
+      ctx.fillStyle = color + '33'
+      ctx.fillRect(x, y, w, h)
+
+      ctx.fillStyle = color
+      ctx.font = 'bold 12px sans-serif'
+      ctx.fillText(tipo?.label || r.tipo, x + 6, y + 16)
+    })
+
+    // Desenha retangulo sendo desenhado agora
+    if (desenhando && inicio && atual) {
+      const tipo = TIPOS_REGIAO.find(t => t.key === tipoSelecionado)
+      const color = tipo?.color || '#fff'
+      const x = Math.min(inicio.x, atual.x)
+      const y = Math.min(inicio.y, atual.y)
+      const w = Math.abs(atual.x - inicio.x)
+      const h = Math.abs(atual.y - inicio.y)
+
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 3])
+      ctx.strokeRect(x, y, w, h)
+      ctx.fillStyle = color + '22'
+      ctx.fillRect(x, y, w, h)
+    }
+  }
+
+  function getPosCanvas(e: React.MouseEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current!
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    }
+  }
+
+  function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    const pos = getPosCanvas(e)
+    setInicio(pos)
+    setAtual(pos)
+    setDesenhando(true)
+  }
+
+  function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!desenhando) return
+    setAtual(getPosCanvas(e))
+  }
+
+  async function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!desenhando || !inicio) return
+    setDesenhando(false)
+
+    const canvas = canvasRef.current!
+    const pos = getPosCanvas(e)
+    const x1 = Math.min(inicio.x, pos.x) / canvas.width
+    const y1 = Math.min(inicio.y, pos.y) / canvas.height
+    const x2 = Math.max(inicio.x, pos.x) / canvas.width
+    const y2 = Math.max(inicio.y, pos.y) / canvas.height
+
+    if (x2 - x1 < 0.02 || y2 - y1 < 0.02) return  // retangulo muito pequeno
+
+    setSalvando(true)
+    try {
+      const res = await fetch(`${API}/regioes/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: camera.id, tipo: tipoSelecionado, x1, y1, x2, y2 }),
+      })
+      const nova = await res.json()
+      setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), nova])
+    } catch {}
+    setSalvando(false)
+    setInicio(null)
+    setAtual(null)
+  }
+
+  async function deletarRegiao(tipo: string) {
+    try {
+      await fetch(`${API}/regioes/${camera.id}/${tipo}`, { method: 'DELETE' })
+      setRegioes(prev => prev.filter(r => r.tipo !== tipo))
+    } catch {}
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col gap-4 p-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-white font-bold text-lg">Regioes Monitoradas</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
+        </div>
+
+        <p className="text-gray-400 text-xs">Selecione um tipo e desenhe o retangulo na imagem.</p>
+
+        {/* Seletor de tipo */}
+        <div className="flex gap-2 flex-wrap">
+          {TIPOS_REGIAO.map(t => (
+            <button key={t.key} onClick={() => setTipoSelecionado(t.key)}
+              style={{ borderColor: t.color, color: tipoSelecionado === t.key ? '#fff' : t.color,
+                background: tipoSelecionado === t.key ? t.color : 'transparent' }}
+              className="px-3 py-1 rounded-lg text-sm font-bold border-2 transition">
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Canvas */}
+        <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+          <canvas
+            ref={canvasRef}
+            width={640}
+            height={360}
+            className="w-full h-full cursor-crosshair"
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+          />
+          {salvando && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <span className="text-white text-sm">Salvando...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Lista de regioes salvas */}
+        {regioes.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-gray-400 text-xs mb-1">Regioes salvas:</p>
+            {regioes.map(r => {
+              const tipo = TIPOS_REGIAO.find(t => t.key === r.tipo)
+              return (
+                <div key={r.id} className="flex items-center justify-between bg-gray-900 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span style={{ background: tipo?.color }} className="w-3 h-3 rounded-sm inline-block" />
+                    <span className="text-gray-300 text-sm">{tipo?.label || r.tipo}</span>
+                  </div>
+                  <button onClick={() => deletarRegiao(r.tipo)}
+                    className="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 rounded">
+                    Remover
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── PAINEL ANALITICOS ───────────────────────────────────────────────────────
 function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: () => void }) {
   const [analiticos, setAnaliticos] = useState<Analiticos>(ANALITICOS_DEFAULT)
   const [salvando, setSalvando] = useState(false)
@@ -125,7 +435,7 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
   )
 }
 
-// Player MJPEG — usa <img> nativa, 1 conexao continua, delay zero
+// ─── MJPEG PLAYER ───────────────────────────────────────────────────────────
 function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const imgRef = useRef<HTMLImageElement>(null)
   const [status, setStatus] = useState<'connecting' | 'live' | 'error'>('connecting')
@@ -136,14 +446,12 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
   function conectar() {
     if (!imgRef.current) return
     setStatus('connecting')
-    // Adiciona timestamp para forcar nova conexao na reconexao
     imgRef.current.src = `${url}?t=${Date.now()}`
   }
 
   useEffect(() => {
     conectar()
     return () => {
-      // Ao desmontar, para o stream limpando o src
       if (imgRef.current) imgRef.current.src = ''
       if (reconnectRef.current) clearTimeout(reconnectRef.current)
     }
@@ -156,7 +464,6 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
 
   function handleError() {
     setStatus('error')
-    // Tenta reconectar apos 3s
     reconnectRef.current = setTimeout(() => conectar(), 3000)
   }
 
@@ -165,7 +472,6 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)',
       zIndex: 9999, display: 'flex', flexDirection: 'column',
     }}>
-      {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 16px', background: 'rgba(0,0,0,0.6)',
@@ -190,41 +496,29 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
             <span style={{ color: '#fca5a5', fontSize: 12 }}>Reconectando em 3s...</span>
           )}
         </div>
-        <button
-          onClick={onClose}
+        <button onClick={onClose}
           style={{
             background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
             fontSize: 20, width: 36, height: 36, borderRadius: 8,
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
+          }}>
           x
         </button>
       </div>
 
-      {/* Stream — tag img nativa, browser decodifica MJPEG automaticamente */}
       <div style={{ flex: 1, position: 'relative', background: '#000' }}>
-        <img
-          ref={imgRef}
-          onLoad={handleLoad}
-          onError={handleError}
-          alt={camera.nome}
-          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-        />
-
-        {/* Overlay enquanto conecta */}
+        <img ref={imgRef} onLoad={handleLoad} onError={handleError} alt={camera.nome}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
         {status !== 'live' && (
           <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column',
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
             background: 'rgba(0,0,0,0.55)', gap: 14,
           }}>
             {status === 'connecting' ? (
               <>
                 <div style={{
-                  width: 40, height: 40,
-                  border: '3px solid rgba(255,255,255,0.15)',
+                  width: 40, height: 40, border: '3px solid rgba(255,255,255,0.15)',
                   borderTopColor: '#fff', borderRadius: '50%',
                   animation: 'spin 0.8s linear infinite',
                 }} />
@@ -232,7 +526,7 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
                 <span style={{ color: '#9ca3af', fontSize: 14 }}>Aguardando stream...</span>
               </>
             ) : (
-              <span style={{ color: '#fca5a5', fontSize: 14 }}>Sem sinal — reconectando...</span>
+              <span style={{ color: '#fca5a5', fontSize: 14 }}>Sem sinal - reconectando...</span>
             )}
           </div>
         )}
@@ -241,13 +535,17 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
   )
 }
 
-function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
+// ─── CAMERA PLAYER CARD ──────────────────────────────────────────────────────
+function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtualizada }: {
   camera: Camera
   cameraAoVivoId: string | null
   setCameraAoVivoId: (id: string | null) => void
+  onCameraAtualizada: (c: Camera) => void
 }) {
   const aoVivo = cameraAoVivoId === camera.id
   const [showAnaliticos, setShowAnaliticos] = useState(false)
+  const [showRegioes, setShowRegioes] = useState(false)
+  const [showEditar, setShowEditar] = useState(false)
 
   const snapshotUrl = `${API}/cameras/${camera.id}/snapshot`
 
@@ -256,35 +554,29 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
       {showAnaliticos && (
         <PainelAnaliticos cameraId={camera.id} onClose={() => setShowAnaliticos(false)} />
       )}
-
-      {/* Modal MJPEG — renderiza fora do card, ocupa tela toda */}
+      {showRegioes && (
+        <ModalRegioes camera={camera} onClose={() => setShowRegioes(false)} />
+      )}
+      {showEditar && (
+        <ModalEditar camera={camera} onClose={() => setShowEditar(false)} onSalvo={onCameraAtualizada} />
+      )}
       {aoVivo && (
-        <MjpegPlayer
-          camera={camera}
-          onClose={() => setCameraAoVivoId(null)}
-        />
+        <MjpegPlayer camera={camera} onClose={() => setCameraAoVivoId(null)} />
       )}
 
       <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
-        {/* Thumbnail / preview */}
         <div className="relative aspect-video bg-black">
-          <img
-            src={snapshotUrl}
-            alt={camera.nome}
+          <img src={snapshotUrl} alt={camera.nome}
             className="w-full h-full object-cover opacity-60"
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
-          <button
-            onClick={() => setCameraAoVivoId(camera.id)}
-            className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition"
-          >
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <button onClick={() => setCameraAoVivoId(camera.id)}
+            className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition">
             <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
               <span className="text-white text-2xl ml-1">&#9654;</span>
             </div>
           </button>
         </div>
 
-        {/* Controls */}
         <div className="p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-white font-bold">{camera.nome}</span>
@@ -293,19 +585,20 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCameraAoVivoId(camera.id)}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1"
-            >
+            <button onClick={() => setCameraAoVivoId(camera.id)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1">
               <span>&#9654;</span> Ao Vivo
             </button>
-            <BtnIcon onClick={() => {}} title="Regioes" className="bg-gray-700 hover:bg-gray-600 text-white">
+            <BtnIcon onClick={() => setShowRegioes(true)} title="Regioes monitoradas"
+              className="bg-gray-700 hover:bg-emerald-700 text-emerald-300">
               [R]
             </BtnIcon>
-            <BtnIcon onClick={() => {}} title="Editar" className="bg-gray-700 hover:bg-gray-600 text-white">
+            <BtnIcon onClick={() => setShowEditar(true)} title="Editar camera"
+              className="bg-gray-700 hover:bg-yellow-700 text-yellow-300">
               [E]
             </BtnIcon>
-            <BtnIcon onClick={() => setShowAnaliticos(true)} title="Analiticos IA" className="bg-gray-700 hover:bg-gray-600 text-purple-300">
+            <BtnIcon onClick={() => setShowAnaliticos(true)} title="Analiticos IA"
+              className="bg-gray-700 hover:bg-gray-600 text-purple-300">
               IA
             </BtnIcon>
           </div>
@@ -315,6 +608,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId }: {
   )
 }
 
+// ─── PAGE ────────────────────────────────────────────────────────────────────
 export default function CamerasPage() {
   const { usuario } = useAuth()
   const [cameras, setCameras] = useState<Camera[]>([])
@@ -328,6 +622,10 @@ export default function CamerasPage() {
       .then(data => { setCameras(Array.isArray(data) ? data : []); setCarregando(false) })
       .catch(() => setCarregando(false))
   }, [usuario])
+
+  function onCameraAtualizada(atualizada: Camera) {
+    setCameras(prev => prev.map(c => c.id === atualizada.id ? atualizada : c))
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-6">
@@ -361,6 +659,7 @@ export default function CamerasPage() {
                 camera={camera}
                 cameraAoVivoId={cameraAoVivoId}
                 setCameraAoVivoId={setCameraAoVivoId}
+                onCameraAtualizada={onCameraAtualizada}
               />
             ))}
           </div>
