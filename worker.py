@@ -9,6 +9,7 @@ import tempfile
 import collections
 import subprocess
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ultralytics import YOLO
 from supabase import create_client
@@ -16,7 +17,7 @@ from supabase import create_client
 API_BASE = "https://vms-platform-production.up.railway.app"
 
 # Supabase
-SUPABASE_URL        = os.environ.get("SUPABASE_URL", "")
+SUPABASE_URL         = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 print("Carregando modelo YOLOv8 Pose...", flush=True)
@@ -24,17 +25,17 @@ model_pose = YOLO("yolov8n-pose.pt")
 print("Modelo carregado!", flush=True)
 
 # Keypoints YOLOv8 Pose
-OMBRO_ESQ    = 5
-OMBRO_DIR    = 6
-QUADRIL_ESQ  = 11
-QUADRIL_DIR  = 12
+OMBRO_ESQ     = 5
+OMBRO_DIR     = 6
+QUADRIL_ESQ   = 11
+QUADRIL_DIR   = 12
 TORNOZELO_ESQ = 15
 TORNOZELO_DIR = 16
-PULSO_ESQ    = 9
-PULSO_DIR    = 10
+PULSO_ESQ     = 9
+PULSO_DIR     = 10
 
 # ─────────────────────────────────────────────
-# CONFIGURAÇÕES DE HÁBITOS
+# CONFIGURACOES DE HABITOS
 # ─────────────────────────────────────────────
 MIN_AMOSTRAS          = 3
 THRESHOLD_MULTIPLIER  = 1.5
@@ -43,31 +44,77 @@ BANHO_DURACAO_MIN     = 5
 COZINHA_DURACAO_MIN   = 10
 
 # ─────────────────────────────────────────────
-# CONFIGURAÇÕES DE CLIPE DE VÍDEO
+# CONFIGURACOES DE CLIPE DE VIDEO
 # ─────────────────────────────────────────────
-PRE_EVENTO_SEG  = 10
-POS_EVENTO_SEG  = 10
-FPS_BUFFER      = 15
-MAX_BUFFER      = PRE_EVENTO_SEG * FPS_BUFFER  # 150 frames pré-evento
+PRE_EVENTO_SEG = 10
+POS_EVENTO_SEG = 10
+FPS_BUFFER     = 15
+MAX_BUFFER     = PRE_EVENTO_SEG * FPS_BUFFER  # 150 frames pre-evento
 
-# Buffer circular por câmera: guarda caminhos de arquivos JPEG
-# {camera_id: deque de caminhos}
 _buffers: dict = {}
 
 # ─────────────────────────────────────────────
-# AO VIVO — PUBLISH FRAME PARA SUPABASE CDN
+# PUBLISH AO VIVO — pool fixo, sem thread por frame
 # ─────────────────────────────────────────────
-LIVE_BUCKET       = "live-frames"
-_ultimo_publish: dict = {}   # {camera_id: timestamp}
-PUBLISH_INTERVALO = 0.1      # 10fps = a cada 100ms
+PUBLISH_INTERVALO = 0.1   # 10fps maximo por camera
+
+_ultimo_publish: dict = {}
+
+# Pool fixo: 1 worker por camera (maximo 8 cameras), nunca cresce
+_publish_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="publish")
+
+# Flag por camera: evita enfileirar se ja ha um publish em andamento
+_publish_em_andamento: dict = {}
+_publish_lock = threading.Lock()
+
+
+def publish_live_frame(camera_id: str, frame):
+    """Envia frame JPEG para o backend. Roda dentro do pool fixo."""
+    with _publish_lock:
+        _publish_em_andamento[camera_id] = False  # libera slot ao entrar
+
+    try:
+        frame_pequeno = cv2.resize(frame, (640, 360))
+        _, buffer = cv2.imencode('.jpg', frame_pequeno, [cv2.IMWRITE_JPEG_QUALITY, 60])
+        jpg_bytes = buffer.tobytes()
+        requests.post(
+            f"{API_BASE}/cameras/{camera_id}/frame",
+            data=jpg_bytes,
+            headers={"Content-Type": "image/jpeg"},
+            timeout=2
+        )
+    except Exception as e:
+        print(f"[LIVE] Erro publish {camera_id}: {e}", flush=True)
+
+
+def agendar_publish(camera_id: str, frame):
+    """
+    Agenda publish no pool fixo.
+    Se ja ha um publish em andamento para esta camera, descarta o frame
+    (nao faz sentido enfileirar frames atrasados).
+    """
+    agora = time.time()
+    if agora - _ultimo_publish.get(camera_id, 0) < PUBLISH_INTERVALO:
+        return  # ainda dentro do intervalo minimo
+
+    with _publish_lock:
+        if _publish_em_andamento.get(camera_id, False):
+            return  # ja ha um publish rodando, descarta
+        _publish_em_andamento[camera_id] = True
+
+    _ultimo_publish[camera_id] = agora
+    _publish_pool.submit(publish_live_frame, camera_id, frame.copy())
+
 
 # ── HLS STREAMING ──────────────────────────────────────────────────────────────
 _hls_processos: dict = {}
 
 def iniciar_hls(camera_id: str, rtsp_url: str):
     if camera_id in _hls_processos:
-        try: _hls_processos[camera_id].kill()
-        except: pass
+        try:
+            _hls_processos[camera_id].kill()
+        except:
+            pass
     hls_dir = f"/tmp/hls/{camera_id}"
     os.makedirs(hls_dir, exist_ok=True)
     cmd = [
@@ -92,26 +139,12 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
 
 def parar_hls(camera_id: str):
     if camera_id in _hls_processos:
-        try: _hls_processos[camera_id].kill()
-        except: pass
+        try:
+            _hls_processos[camera_id].kill()
+        except:
+            pass
         del _hls_processos[camera_id]
 
-
-
-def publish_live_frame(camera_id: str, frame):
-    """Envia frame JPEG para o backend Railway (sem custo de storage)."""
-    try:
-        frame_pequeno = cv2.resize(frame, (640, 360))
-        _, buffer = cv2.imencode('.jpg', frame_pequeno, [cv2.IMWRITE_JPEG_QUALITY, 60])
-        jpg_bytes = buffer.tobytes()
-        requests.post(
-            f"{API_BASE}/cameras/{camera_id}/frame",
-            data=jpg_bytes,
-            headers={"Content-Type": "image/jpeg"},
-            timeout=2
-        )
-    except Exception as e:
-        print(f"[LIVE] Erro publish {camera_id}: {e}", flush=True)
 
 # ─────────────────────────────────────────────
 # SUPABASE CLIENT
@@ -119,8 +152,9 @@ def publish_live_frame(camera_id: str, frame):
 def get_supabase():
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+
 # ─────────────────────────────────────────────
-# FUNÇÕES DE BUFFER E CLIPE
+# FUNCOES DE BUFFER E CLIPE
 # ─────────────────────────────────────────────
 def get_buffer(camera_id: str) -> collections.deque:
     if camera_id not in _buffers:
@@ -128,12 +162,10 @@ def get_buffer(camera_id: str) -> collections.deque:
     return _buffers[camera_id]
 
 def adicionar_frame_buffer(camera_id: str, frame):
-    """Salva frame como JPEG em disco e guarda só o caminho no buffer."""
     buf = get_buffer(camera_id)
     if len(buf) == buf.maxlen:
         try:
-            old_path = buf[0]
-            os.remove(old_path)
+            os.remove(buf[0])
         except:
             pass
     path = f"/tmp/buf_{camera_id}_{int(time.time()*1000)}.jpg"
@@ -143,18 +175,13 @@ def adicionar_frame_buffer(camera_id: str, frame):
     except Exception as e:
         print(f"[BUFFER] Erro ao salvar frame: {e}", flush=True)
 
-def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -> str | None:
-    """
-    Combina frames pré-evento (buffer) + captura pós-evento ao vivo,
-    gera um .mp4 e faz upload no Supabase Storage bucket 'event-clips'.
-    Retorna URL pública ou None em caso de erro.
-    """
+def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str):
     buf = get_buffer(camera_id)
     paths_pre = []
     for i, p in enumerate(list(buf)):
         try:
-            dst = f"/tmp/pre_{evento_id}_{i}.jpg"
             import shutil
+            dst = f"/tmp/pre_{evento_id}_{i}.jpg"
             shutil.copy2(p, dst)
             paths_pre.append(dst)
         except:
@@ -179,7 +206,7 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
 
     todos_paths = paths_pre + paths_pos
     n_frames    = len(todos_paths)
-    print(f"[CLIPE] {n_frames} frames ({len(paths_pre)} pré + {len(paths_pos)} pós)", flush=True)
+    print(f"[CLIPE] {n_frames} frames ({len(paths_pre)} pre + {len(paths_pos)} pos)", flush=True)
 
     if not todos_paths:
         print(f"[CLIPE] Sem frames para evento {evento_id}", flush=True)
@@ -227,8 +254,8 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
             print(f"[CLIPE] Erro ffmpeg: {result.stderr.decode()}", flush=True)
             return None
 
-        supabase      = get_supabase()
-        storage_path  = f"eventos/{camera_id}/{evento_id}.mp4"
+        supabase     = get_supabase()
+        storage_path = f"eventos/{camera_id}/{evento_id}.mp4"
 
         with open(tmp_path, "rb") as f:
             video_bytes = f.read()
@@ -240,7 +267,7 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
         )
 
         url = supabase.storage.from_("event-clips").get_public_url(storage_path)
-        print(f"[CLIPE] ✅ Upload OK → {url}", flush=True)
+        print(f"[CLIPE] Upload OK -> {url}", flush=True)
         return url
 
     except Exception as e:
@@ -253,8 +280,9 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str) -
             except:
                 pass
 
+
 # ─────────────────────────────────────────────
-# MÓDULO DE HÁBITOS
+# MODULO DE HABITOS
 # ─────────────────────────────────────────────
 def _decimal_para_hora(decimal: float) -> str:
     h = int(decimal)
@@ -269,7 +297,6 @@ def _decimal_para_time_str(decimal: float) -> str:
 def _atualizar_perfil_e_alertar(camera_id, empresa_id, tipo, hora_atual, horario_evento):
     try:
         supabase = get_supabase()
-
         registros = supabase.table("habitos_registros").select(
             "metadata"
         ).eq("camera_id", camera_id).eq("tipo", tipo).order(
@@ -306,8 +333,8 @@ def _atualizar_perfil_e_alertar(camera_id, empresa_id, tipo, hora_atual, horario
         }, on_conflict="camera_id,pessoa_id,tipo").execute()
 
         print(
-            f"[HABITOS] {tipo} | média={_decimal_para_hora(media)} "
-            f"desvio=±{desvio*60:.0f}min threshold={_decimal_para_hora(threshold)} "
+            f"[HABITOS] {tipo} | media={_decimal_para_hora(media)} "
+            f"desvio=+-{desvio*60:.0f}min threshold={_decimal_para_hora(threshold)} "
             f"amostras={n}",
             flush=True
         )
@@ -337,7 +364,7 @@ def _atualizar_perfil_e_alertar(camera_id, empresa_id, tipo, hora_atual, horario
         }).execute()
 
         print(
-            f"[HABITOS] ⚠️ ALERTA {tipo} | esperado até {_decimal_para_hora(threshold)} "
+            f"[HABITOS] ALERTA {tipo} | esperado ate {_decimal_para_hora(threshold)} "
             f"| ocorreu {_decimal_para_hora(hora_atual)} | atraso {desvio_minutos}min",
             flush=True
         )
@@ -352,14 +379,11 @@ def registrar_habito_sono(camera_id, empresa_id, horario):
     try:
         supabase = get_supabase()
         hoje     = horario.date().isoformat()
-
         existente = supabase.table("habitos_registros").select("id").eq(
             "camera_id", camera_id
         ).eq("tipo", "sono").gte("horario_evento", f"{hoje}T00:00:00Z").execute()
-
         if existente.data:
             return
-
         supabase.table("habitos_registros").insert({
             "camera_id": camera_id,
             "empresa_id": empresa_id,
@@ -367,10 +391,8 @@ def registrar_habito_sono(camera_id, empresa_id, horario):
             "horario_evento": horario.isoformat(),
             "metadata": {"hora_decimal": hora_decimal}
         }).execute()
-
-        print(f"[HABITOS] 🌙 Sono registrado: {horario.strftime('%H:%M')}", flush=True)
+        print(f"[HABITOS] Sono registrado: {horario.strftime('%H:%M')}", flush=True)
         _atualizar_perfil_e_alertar(camera_id, empresa_id, "sono", hora_decimal, horario)
-
     except Exception as e:
         print(f"[HABITOS] Erro sono: {e}", flush=True)
 
@@ -381,14 +403,11 @@ def registrar_habito_banho(camera_id, empresa_id, horario_inicio, duracao_minuto
     try:
         supabase = get_supabase()
         hoje     = horario_inicio.date().isoformat()
-
         existente = supabase.table("habitos_registros").select("id").eq(
             "camera_id", camera_id
         ).eq("tipo", "banho").gte("horario_evento", f"{hoje}T00:00:00Z").execute()
-
         if existente.data:
             return
-
         supabase.table("habitos_registros").insert({
             "camera_id": camera_id,
             "empresa_id": empresa_id,
@@ -397,10 +416,8 @@ def registrar_habito_banho(camera_id, empresa_id, horario_inicio, duracao_minuto
             "duracao_minutos": duracao_minutos,
             "metadata": {"hora_decimal": hora_decimal}
         }).execute()
-
-        print(f"[HABITOS] 🚿 Banho registrado: {horario_inicio.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
+        print(f"[HABITOS] Banho registrado: {horario_inicio.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
         _atualizar_perfil_e_alertar(camera_id, empresa_id, "banho", hora_decimal, horario_inicio)
-
     except Exception as e:
         print(f"[HABITOS] Erro banho: {e}", flush=True)
 
@@ -408,7 +425,6 @@ def registrar_habito_refeicao(camera_id, empresa_id, horario, duracao_minutos):
     hora_decimal = horario.hour + horario.minute / 60.0
     try:
         supabase = get_supabase()
-
         supabase.table("habitos_registros").insert({
             "camera_id": camera_id,
             "empresa_id": empresa_id,
@@ -417,12 +433,10 @@ def registrar_habito_refeicao(camera_id, empresa_id, horario, duracao_minutos):
             "duracao_minutos": duracao_minutos,
             "metadata": {"hora_decimal": hora_decimal}
         }).execute()
-
-        print(f"[HABITOS] 🍽️ Refeição registrada: {horario.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
+        print(f"[HABITOS] Refeicao registrada: {horario.strftime('%H:%M')} por {duracao_minutos}min", flush=True)
         _atualizar_perfil_e_alertar(camera_id, empresa_id, "refeicao", hora_decimal, horario)
-
     except Exception as e:
-        print(f"[HABITOS] Erro refeição: {e}", flush=True)
+        print(f"[HABITOS] Erro refeicao: {e}", flush=True)
 
 def verificar_habitos_ausentes():
     try:
@@ -447,19 +461,16 @@ def verificar_habitos_ausentes():
             ocorreu = supabase.table("habitos_registros").select("id").eq(
                 "camera_id", camera_id
             ).eq("tipo", tipo).gte("horario_evento", f"{hoje}T00:00:00Z").execute()
-
             if ocorreu.data:
                 continue
 
             alerta_existente = supabase.table("habitos_alertas").select("id").eq(
                 "camera_id", camera_id
             ).eq("tipo", tipo).gte("created_at", f"{hoje}T00:00:00Z").execute()
-
             if alerta_existente.data:
                 continue
 
             desvio_minutos = int((hora_agora - perfil["hora_media"]) * 60)
-
             supabase.table("habitos_alertas").insert({
                 "camera_id": camera_id,
                 "empresa_id": empresa_id,
@@ -472,8 +483,8 @@ def verificar_habitos_ausentes():
             }).execute()
 
             print(
-                f"[HABITOS] ⚠️ AUSÊNCIA {tipo} não ocorreu | "
-                f"câmera {camera_id} | atraso {desvio_minutos}min",
+                f"[HABITOS] AUSENCIA {tipo} nao ocorreu | "
+                f"camera {camera_id} | atraso {desvio_minutos}min",
                 flush=True
             )
 
@@ -481,13 +492,14 @@ def verificar_habitos_ausentes():
         print(f"[HABITOS] Erro verificar_ausentes: {e}", flush=True)
 
 def thread_verificacao_habitos():
-    print("[HABITOS] Thread de verificação iniciada (a cada 5min)", flush=True)
+    print("[HABITOS] Thread de verificacao iniciada (a cada 5min)", flush=True)
     while True:
         time.sleep(300)
         verificar_habitos_ausentes()
 
+
 # ─────────────────────────────────────────────
-# CAPTURA DE FRAME ÚNICO (para loop YOLO)
+# CAPTURA DE FRAME UNICO (para loop YOLO)
 # ─────────────────────────────────────────────
 def capturar_frame(rtsp_url):
     cmd = [
@@ -506,8 +518,9 @@ def capturar_frame(rtsp_url):
         print(f"Erro ffmpeg: {e}", flush=True)
     return None
 
+
 # ─────────────────────────────────────────────
-# THREAD DE CAPTURA CONTÍNUA (buffer + ao vivo)
+# THREAD DE CAPTURA CONTINUA (buffer + ao vivo)
 # ─────────────────────────────────────────────
 _captura_status: dict = {}
 
@@ -530,7 +543,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                 "pipe:1"
             ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-            print(f"[CAPTURA] Conexão RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
+            print(f"[CAPTURA] Conexao RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
             buffer = b""
 
             while _captura_status.get(camera_id, {}).get("rodando"):
@@ -554,18 +567,9 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                         arr   = np.frombuffer(frame_data, dtype=np.uint8)
                         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         if frame is not None:
-                            # Buffer para clipes
                             adicionar_frame_buffer(camera_id, frame)
-
-                            # ── PUBLISH AO VIVO ──────────────────────
-                            agora_pub = time.time()
-                            if agora_pub - _ultimo_publish.get(camera_id, 0) >= PUBLISH_INTERVALO:
-                                _ultimo_publish[camera_id] = agora_pub
-                                threading.Thread(
-                                    target=publish_live_frame,
-                                    args=(camera_id, frame.copy()),
-                                    daemon=True
-                                ).start()
+                            # Usa pool fixo — nunca cria thread nova
+                            agendar_publish(camera_id, frame)
 
         except Exception as e:
             print(f"[CAPTURA] Erro {camera_id}: {e}", flush=True)
@@ -585,17 +589,16 @@ def iniciar_captura_continua(camera_id: str, rtsp_url: str):
     if _captura_status.get(camera_id, {}).get("rodando"):
         return
     _captura_status[camera_id] = {"rodando": True}
-    # Inicia HLS em paralelo
     threading.Thread(target=iniciar_hls, args=(camera_id, rtsp_url), daemon=True).start()
-    t = threading.Thread(
+    threading.Thread(
         target=_thread_captura_continua,
         args=(camera_id, rtsp_url),
         daemon=True
-    )
-    t.start()
+    ).start()
+
 
 # ─────────────────────────────────────────────
-# DETECÇÃO — FUNÇÕES AUXILIARES
+# DETECCAO — FUNCOES AUXILIARES
 # ─────────────────────────────────────────────
 def pessoa_horizontal(box, keypoints):
     x1, y1, x2, y2 = box
@@ -626,7 +629,6 @@ def lado_da_linha(px, py, x1, y1, x2, y2):
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
 def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
-    """Salva evento no backend e dispara gravação de clipe em thread separada."""
     try:
         resp = requests.post(f"{API_BASE}/eventos/", json={
             "camera_id": camera_id,
@@ -640,7 +642,7 @@ def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
         except:
             pass
 
-        print(f"[{nome}] ⚠️ {tipo} ({confianca:.0%})", flush=True)
+        print(f"[{nome}] {tipo} ({confianca:.0%})", flush=True)
 
         if evento_id and rtsp_url:
             def _gravar():
@@ -650,7 +652,7 @@ def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
                         requests.patch(f"{API_BASE}/eventos/{evento_id}", json={
                             "video_url": url
                         }, timeout=5)
-                        print(f"[CLIPE] Evento {evento_id} atualizado com vídeo", flush=True)
+                        print(f"[CLIPE] Evento {evento_id} atualizado com video", flush=True)
                     except Exception as e:
                         print(f"[CLIPE] Erro ao atualizar evento: {e}", flush=True)
 
@@ -692,9 +694,7 @@ def buscar_configuracoes(camera_id):
         pass
     return linha, regioes
 
-
 def buscar_analiticos(camera_id: str) -> dict:
-    """Busca analíticos ativos da câmera no Supabase."""
     try:
         supabase = get_supabase()
         res = supabase.table("camera_analiticos").select("*").eq("camera_id", camera_id).execute()
@@ -720,8 +720,9 @@ def iou(boxA, boxB):
     areaB = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
     return inter / (areaA + areaB - inter)
 
+
 # ─────────────────────────────────────────────
-# LOOP PRINCIPAL POR CÂMERA
+# LOOP PRINCIPAL POR CAMERA
 # ─────────────────────────────────────────────
 def processar_camera(camera):
     camera_id  = camera["id"]
@@ -742,12 +743,12 @@ def processar_camera(camera):
     heatmap_acc          = defaultdict(float)
     heatmap_ultimo_envio = time.time()
 
-    cooldowns          = defaultdict(lambda: defaultdict(float))
-    COOLDOWN_SEGUNDOS  = 30
+    cooldowns         = defaultdict(lambda: defaultdict(float))
+    COOLDOWN_SEGUNDOS = 30
 
     presenca_regiao      = defaultdict(lambda: defaultdict(dict))
     sono_registrado_hoje = None
-    analiticos         = buscar_analiticos(camera_id)
+    analiticos           = buscar_analiticos(camera_id)
 
     while True:
         try:
@@ -756,7 +757,7 @@ def processar_camera(camera):
 
             if agora - config_refresh > 30:
                 linha, regioes = buscar_configuracoes(camera_id)
-                analiticos = buscar_analiticos(camera_id)
+                analiticos     = buscar_analiticos(camera_id)
                 config_refresh = agora
 
             hoje_str = agora_dt.date().isoformat()
@@ -826,11 +827,11 @@ def processar_camera(camera):
                     hy = round(cy / 0.02) * 0.02
                     heatmap_acc[(hx, hy)] += 1
 
-                    horizontal  = pessoa_horizontal(det["box"], det["kps"])
-                    na_cama     = cama     and pessoa_na_regiao(cx, cy, cama)
-                    no_banheiro = banheiro and pessoa_na_regiao(cx, cy, banheiro)
-                    na_cozinha  = cozinha  and pessoa_na_regiao(cx, cy, cozinha)
-                    no_quarto   = quarto   and pessoa_na_regiao(cx, cy, quarto)
+                    horizontal     = pessoa_horizontal(det["box"], det["kps"])
+                    na_cama        = cama     and pessoa_na_regiao(cx, cy, cama)
+                    no_banheiro    = banheiro and pessoa_na_regiao(cx, cy, banheiro)
+                    na_cozinha     = cozinha  and pessoa_na_regiao(cx, cy, cozinha)
+                    no_quarto      = quarto   and pessoa_na_regiao(cx, cy, quarto)
                     estava_na_cama = track.get("na_cama", False)
 
                     def pode_alertar(tipo):
@@ -839,7 +840,6 @@ def processar_camera(camera):
                     def analitico_ativo(key):
                         return analiticos.get(key, True)
 
-                    # ── DETECÇÕES ──────────────────────────────────────
                     if estava_na_cama and not na_cama and horizontal:
                         if analitico_ativo("queda_leito") and pode_alertar("queda_leito"):
                             salvar_evento(camera_id, "queda_leito", det["conf"], nome, rtsp_url)
@@ -866,14 +866,12 @@ def processar_camera(camera):
                             salvar_evento(camera_id, "person", det["conf"], nome, rtsp_url)
                             cooldowns[tid]["person"] = agora
 
-                    # ── HÁBITOS: SONO ───────────────────────────────────
                     if no_quarto and not horizontal and sono_registrado_hoje != hoje_str:
                         hora_agora = agora_dt.hour
                         if 4 <= hora_agora <= 11:
                             sono_registrado_hoje = hoje_str
                             registrar_habito_sono(camera_id, empresa_id, agora_dt)
 
-                    # ── HÁBITOS: BANHO ──────────────────────────────────
                     if no_banheiro:
                         pr = presenca_regiao[tid]["banheiro"]
                         if not pr:
@@ -891,7 +889,6 @@ def processar_camera(camera):
                     else:
                         presenca_regiao[tid]["banheiro"] = {}
 
-                    # ── HÁBITOS: REFEIÇÃO ───────────────────────────────
                     if na_cozinha:
                         pr = presenca_regiao[tid]["cozinha"]
                         if not pr:
@@ -947,11 +944,12 @@ def processar_camera(camera):
             print(f"[{nome}] Erro: {e}. Reiniciando em 10s...", flush=True)
             time.sleep(10)
 
+
 # ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
 def main():
-    print("VMS Worker — Monitoramento de Idosos iniciando...", flush=True)
+    print("VMS Worker iniciando...", flush=True)
 
     while True:
         try:
@@ -963,8 +961,7 @@ def main():
             print(f"Erro: {e}. Tentando em 5s...", flush=True)
             time.sleep(5)
 
-    t_habitos = threading.Thread(target=thread_verificacao_habitos, daemon=True)
-    t_habitos.start()
+    threading.Thread(target=thread_verificacao_habitos, daemon=True).start()
 
     threads = []
     for camera in cameras:
