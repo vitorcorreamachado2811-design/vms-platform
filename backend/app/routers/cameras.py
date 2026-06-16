@@ -298,9 +298,9 @@ async def _gerar_mjpeg(rtsp_url: str, camera_id: str):
                 "-rtsp_transport", "tcp",
                 "-i", rtsp_url,
                 "-f", "image2pipe",
-                "-vf", "scale=1280:720",
+                "-vf", "scale=854:480",
                 "-vcodec", "mjpeg",
-                "-q:v", "5",
+                "-q:v", "8",
                 "-r", "15",
                 "-"
             ]
