@@ -520,6 +520,21 @@ def capturar_frame(rtsp_url):
 
 
 # ─────────────────────────────────────────────
+# FRAME MAIS RECENTE POR CAMERA
+# Loop YOLO le daqui em vez de abrir nova conexao RTSP
+# ─────────────────────────────────────────────
+_frame_atual: dict = {}   # {camera_id: np.ndarray}
+_frame_lock = threading.Lock()
+
+def set_frame_atual(camera_id: str, frame):
+    with _frame_lock:
+        _frame_atual[camera_id] = frame
+
+def get_frame_atual(camera_id: str):
+    with _frame_lock:
+        return _frame_atual.get(camera_id)
+
+# ─────────────────────────────────────────────
 # THREAD DE CAPTURA CONTINUA (buffer + ao vivo)
 # ─────────────────────────────────────────────
 _captura_status: dict = {}
@@ -568,6 +583,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         if frame is not None:
                             adicionar_frame_buffer(camera_id, frame)
+                            set_frame_atual(camera_id, frame)
                             # Usa pool fixo — nunca cria thread nova
                             agendar_publish(camera_id, frame)
 
@@ -769,16 +785,12 @@ def processar_camera(camera):
                 heatmap_acc.clear()
                 heatmap_ultimo_envio = agora
 
-            frame_data = capturar_frame(rtsp_url)
-            if frame_data is None:
-                print(f"[{nome}] Sem frame. Aguardando 10s...", flush=True)
-                time.sleep(10)
-                continue
-
-            arr   = np.frombuffer(frame_data, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            # Le frame do cache da thread de captura continua
+            # Evita abrir nova conexao RTSP a cada 2s por camera
+            frame = get_frame_atual(camera_id)
             if frame is None:
-                time.sleep(5)
+                print(f"[{nome}] Aguardando frame da captura continua...", flush=True)
+                time.sleep(2)
                 continue
 
             h, w    = frame.shape[:2]
