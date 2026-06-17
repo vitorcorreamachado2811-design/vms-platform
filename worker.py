@@ -63,6 +63,9 @@ _ultimo_publish: dict = {}
 # Pool fixo: 1 worker por camera (maximo 8 cameras), nunca cresce
 _publish_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="publish")
 
+# Pool fixo para gravacao de clipes — maximo 4 clipes simultaneos
+_clipe_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="clipe")
+
 # Flag por camera: evita enfileirar se ja ha um publish em andamento
 _publish_em_andamento: dict = {}
 _publish_lock = threading.Lock()
@@ -661,18 +664,18 @@ def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
         print(f"[{nome}] {tipo} ({confianca:.0%})", flush=True)
 
         if evento_id and rtsp_url:
-            def _gravar():
-                url = gravar_e_fazer_upload_clipe(camera_id, rtsp_url, str(evento_id))
+            def _gravar(eid=evento_id, cid=camera_id, rurl=rtsp_url):
+                url = gravar_e_fazer_upload_clipe(cid, rurl, str(eid))
                 if url:
                     try:
-                        requests.patch(f"{API_BASE}/eventos/{evento_id}", json={
+                        requests.patch(f"{API_BASE}/eventos/{eid}", json={
                             "video_url": url
                         }, timeout=5)
-                        print(f"[CLIPE] Evento {evento_id} atualizado com video", flush=True)
+                        print(f"[CLIPE] Evento {eid} atualizado com video", flush=True)
                     except Exception as e:
                         print(f"[CLIPE] Erro ao atualizar evento: {e}", flush=True)
 
-            threading.Thread(target=_gravar, daemon=True).start()
+            _clipe_pool.submit(_gravar)
 
     except Exception as e:
         print(f"[{nome}] Erro evento: {e}", flush=True)
