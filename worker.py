@@ -721,10 +721,11 @@ def buscar_analiticos(camera_id: str) -> dict:
             return res.data[0]
     except Exception as e:
         print(f"[ANALITICOS] Erro ao buscar {camera_id}: {e}", flush=True)
+    # Padrao FALSE — so ativa o que o usuario ligar explicitamente
     return {
-        "queda_leito": True, "queda_pe": True, "pessoa": True,
-        "banheiro_tempo": True, "gesto_socorro": True,
-        "linha_contagem": True, "habitos": True
+        "queda_leito": False, "queda_pe": False, "pessoa": False,
+        "banheiro_tempo": False, "gesto_socorro": False,
+        "linha_contagem": False, "habitos": False
     }
 
 def iou(boxA, boxB):
@@ -872,9 +873,11 @@ def processar_camera(camera):
                         lado_ant = track.get("lado")
                         if lado_ant is not None and lado_atual != 0:
                             if lado_ant > 0 and lado_atual < 0:
-                                salvar_evento(camera_id, "entrada", det["conf"], nome, rtsp_url)
+                                if analitico_ativo("linha_contagem"):
+                                    salvar_evento(camera_id, "entrada", det["conf"], nome, rtsp_url)
                             elif lado_ant < 0 and lado_atual > 0:
-                                salvar_evento(camera_id, "saida", det["conf"], nome, rtsp_url)
+                                if analitico_ativo("linha_contagem"):
+                                    salvar_evento(camera_id, "saida", det["conf"], nome, rtsp_url)
 
                     if not horizontal and not na_cama:
                         if analitico_ativo("pessoa") and pode_alertar("person"):
