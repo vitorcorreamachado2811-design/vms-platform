@@ -24,6 +24,8 @@ interface Analiticos {
   gesto_socorro: boolean
   linha_contagem: boolean
   habitos: boolean
+  freezer: boolean
+  caixa: boolean
 }
 
 interface Regiao {
@@ -40,7 +42,7 @@ interface Regiao {
 const ANALITICOS_DEFAULT: Analiticos = {
   queda_leito: false, queda_pe: false, pessoa: false,
   banheiro_tempo: false, gesto_socorro: false,
-  linha_contagem: false, habitos: false,
+  linha_contagem: false, habitos: false, freezer: false, caixa: false,
 }
 
 const TIPOS_REGIAO = [
@@ -670,4 +672,5 @@ export default function CamerasPage() {
     </main>
   )
 }
+
 
