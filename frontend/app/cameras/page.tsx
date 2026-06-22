@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { WebRTCPlayer } from '../../components/WebRTCPlayer'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
 
@@ -574,7 +575,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtual
         <ModalEditar camera={camera} onClose={() => setShowEditar(false)} onSalvo={onCameraAtualizada} />
       )}
       {aoVivo && (
-        <MjpegPlayer camera={camera} onClose={() => setCameraAoVivoId(null)} />
+        <WebRTCPlayer camera={camera} onClose={() => setCameraAoVivoId(null)} />
       )}
 
       <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
@@ -681,3 +682,4 @@ export default function CamerasPage() {
     </main>
   )
 }
+
