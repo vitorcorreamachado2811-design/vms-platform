@@ -409,6 +409,8 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
     { key: 'gesto_socorro', label: 'Gesto de Socorro' },
     { key: 'linha_contagem', label: 'Linha de Contagem' },
     { key: 'habitos', label: 'Monitorar Habitos' },
+    { key: 'freezer', label: 'Monitorar Freezer' },
+    { key: 'caixa', label: 'Auditoria Caixa' },
   ]
 
   return (
@@ -668,3 +670,4 @@ export default function CamerasPage() {
     </main>
   )
 }
+
