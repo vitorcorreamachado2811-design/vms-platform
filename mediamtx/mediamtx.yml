@@ -1,0 +1,53 @@
+# MediaMTX Configuration
+# Documentacao: https://github.com/bluenviron/mediamtx
+
+# Porta RTSP (cameras publicam aqui)
+rtspAddress: :8554
+
+# Porta WebRTC (browser consome aqui)
+webrtcAddress: :8889
+
+# Porta API (backend consulta)
+apiAddress: :9997
+
+# Porta RTMP (opcional)
+rtmpAddress: :1935
+
+# Porta HLS (fallback)
+hlsAddress: :8888
+
+# Logs
+logLevel: info
+logDestinations: [stdout]
+
+# API habilitada para consultar streams ativos
+api: yes
+
+# WebRTC habilitado
+webrtc: yes
+
+# RTSP habilitado
+rtsp: yes
+
+# HLS habilitado como fallback para iOS
+hls: yes
+hlsSegmentCount: 3
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+
+# Autenticacao — desabilitar para comecar simples
+# Em producao, adicionar autenticacao por camera
+authMethod: none
+
+# Paths — aceita qualquer stream sem precisar pre-configurar
+paths:
+  all_others:
+    # Qualquer camera pode publicar
+    source: publisher
+    
+    # Grava clips quando ha leitura ativa (opcional)
+    # record: yes
+    # recordPath: /tmp/clips/%path/%Y-%m-%d_%H-%M-%S-%f
+    
+    # Sem limite de leitores simultaneos
+    maxReaders: 0
