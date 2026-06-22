@@ -24,8 +24,6 @@ interface Analiticos {
   gesto_socorro: boolean
   linha_contagem: boolean
   habitos: boolean
-  freezer: boolean
-  caixa: boolean
 }
 
 interface Regiao {
@@ -42,14 +40,17 @@ interface Regiao {
 const ANALITICOS_DEFAULT: Analiticos = {
   queda_leito: false, queda_pe: false, pessoa: false,
   banheiro_tempo: false, gesto_socorro: false,
-  linha_contagem: false, habitos: false, freezer: false, caixa: false,
+  linha_contagem: false, habitos: false,
 }
 
 const TIPOS_REGIAO = [
-  { key: 'cama',     label: 'Cama',     color: '#3b82f6' },
-  { key: 'banheiro', label: 'Banheiro', color: '#8b5cf6' },
-  { key: 'cozinha',  label: 'Cozinha',  color: '#f59e0b' },
-  { key: 'quarto',   label: 'Quarto',   color: '#10b981' },
+  { key: 'entrada',   label: 'Entrada/Saida', color: '#3b82f6' },
+  { key: 'freezer',   label: 'Freezer',       color: '#06b6d4' },
+  { key: 'caixa',     label: 'Caixa',         color: '#f59e0b' },
+  { key: 'cama',      label: 'Cama',          color: '#8b5cf6' },
+  { key: 'banheiro',  label: 'Banheiro',      color: '#ec4899' },
+  { key: 'cozinha',   label: 'Cozinha',       color: '#10b981' },
+  { key: 'quarto',    label: 'Quarto',        color: '#f97316' },
 ]
 
 function mjpegUrl(cameraId: string) {
@@ -198,11 +199,21 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
       .then(data => setRegioes(Array.isArray(data) ? data : []))
       .catch(() => {})
 
+    // Usa frame ao vivo em vez de snapshot — mais rapido e confiavel
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    img.src = snapshotUrl
+    // Tenta frame ao vivo primeiro, fallback para snapshot
+    const liveUrl = `${API}/cameras/${camera.id}/frame`
+    img.src = liveUrl
     img.onload = () => { imgRef.current = img; setImgCarregada(true) }
-    img.onerror = () => setImgCarregada(true)
+    img.onerror = () => {
+      // Fallback para snapshot
+      const snap = new Image()
+      snap.crossOrigin = 'anonymous'
+      snap.src = `${API}/cameras/${camera.id}/snapshot`
+      snap.onload = () => { imgRef.current = snap; setImgCarregada(true) }
+      snap.onerror = () => setImgCarregada(true)
+    }
   }, [camera.id])
 
   useEffect(() => {
@@ -411,8 +422,6 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
     { key: 'gesto_socorro', label: 'Gesto de Socorro' },
     { key: 'linha_contagem', label: 'Linha de Contagem' },
     { key: 'habitos', label: 'Monitorar Habitos' },
-    { key: 'freezer', label: 'Monitorar Freezer' },
-    { key: 'caixa', label: 'Auditoria Caixa' },
   ]
 
   return (
@@ -672,5 +681,3 @@ export default function CamerasPage() {
     </main>
   )
 }
-
-
