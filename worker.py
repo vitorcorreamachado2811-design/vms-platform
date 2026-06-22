@@ -539,7 +539,7 @@ def processar_camera(camera):
             agora    = time.time()
             agora_dt = datetime.now(timezone.utc)
 
-            if agora - config_refresh > 30:
+            if agora - config_refresh > 300:
                 linha, regioes = buscar_configuracoes(camera_id)
                 analiticos     = buscar_analiticos(camera_id)
                 config_refresh = agora
@@ -548,7 +548,7 @@ def processar_camera(camera):
             if sono_registrado_hoje != hoje_str:
                 sono_registrado_hoje = None
 
-            if agora - heatmap_ultimo_envio > 60:
+            if agora - heatmap_ultimo_envio > 600:
                 enviar_heatmap(camera_id, dict(heatmap_acc), nome)
                 heatmap_acc.clear()
                 heatmap_ultimo_envio = agora
