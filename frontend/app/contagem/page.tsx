@@ -1,359 +1,297 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
 
 const API = 'https://vms-platform-production.up.railway.app'
+const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
+const SUPABASE_KEY = 'sb_publishable_0UZ6n5qJEkfAbiKveWTE0A_ixc_w9MY'
 
 interface Camera {
   id: string
   nome: string
-  rtsp_url: string
   ativo: boolean
 }
 
-interface Linha {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
+interface Evento {
+  id: string
+  camera_id: string
+  tipo: string
+  confianca: number
+  criado_em: string
 }
 
-interface Contagem {
+interface ContagemCamera {
+  camera_id: string
+  nome: string
   entradas: number
   saidas: number
-  saldo: number
+  dentro: number
+  ultima_atividade: string | null
+}
+
+interface PorHora {
+  hora: string
+  entradas: number
+  saidas: number
+}
+
+function formatarHora(iso: string) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatarDataHora(iso: string) {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  })
 }
 
 export default function ContagemPage() {
-  const { usuario, carregando: authCarregando, logout } = useAuth()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const imgRef    = useRef<HTMLImageElement>(null)
+  const { usuario } = useAuth()
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [contagens, setContagens] = useState<ContagemCamera[]>([])
+  const [porHora, setPorHora] = useState<PorHora[]>([])
+  const [totalHoje, setTotalHoje] = useState({ entradas: 0, saidas: 0, dentro: 0, pico: 0 })
+  const [carregando, setCarregando] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState('')
 
-  const [cameras, setCameras]                     = useState<Camera[]>([])
-  const [cameraSelecionada, setCameraSelecionada] = useState<Camera | null>(null)
-  const [snapshot, setSnapshot]                   = useState<string | null>(null)
-  const [linha, setLinha]                         = useState<Linha | null>(null)
-  const [linhaSalva, setLinhaSalva]               = useState<Linha | null>(null)
-  const [desenhando, setDesenhando]               = useState(false)
-  const [pontoA, setPontoA]                       = useState<{ x: number; y: number } | null>(null)
-  const [contagem, setContagem]                   = useState<Contagem | null>(null)
-  const [salvando, setSalvando]                   = useState(false)
-  const [mensagem, setMensagem]                   = useState('')
+  const carregar = useCallback(async () => {
+    if (!usuario) return
+    try {
+      // Busca cameras
+      const resCameras = await fetch(`${API}/cameras/?empresa_id=${usuario.empresa_id}`)
+      const dataCameras: Camera[] = await resCameras.json()
+      setCameras(Array.isArray(dataCameras) ? dataCameras : [])
+
+      // Busca eventos de entrada/saida de hoje
+      const hoje = new Date()
+      hoje.setHours(0, 0, 0, 0)
+      const hojeIso = hoje.toISOString()
+
+      const resEventos = await fetch(
+        `${SUPABASE_URL}/rest/v1/eventos?empresa_id=eq.${usuario.empresa_id}&tipo=in.(entrada,saida)&criado_em=gte.${hojeIso}&order=criado_em.asc&limit=1000`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      )
+      const eventos: Evento[] = await resEventos.json()
+
+      if (!Array.isArray(eventos)) return
+
+      // Calcula contagem por camera
+      const mapaContagem: Record<string, ContagemCamera> = {}
+      for (const cam of dataCameras) {
+        mapaContagem[cam.id] = {
+          camera_id: cam.id,
+          nome: cam.nome,
+          entradas: 0,
+          saidas: 0,
+          dentro: 0,
+          ultima_atividade: null,
+        }
+      }
+
+      for (const ev of eventos) {
+        if (!mapaContagem[ev.camera_id]) continue
+        if (ev.tipo === 'entrada') {
+          mapaContagem[ev.camera_id].entradas++
+          mapaContagem[ev.camera_id].dentro++
+        } else if (ev.tipo === 'saida') {
+          mapaContagem[ev.camera_id].saidas++
+          mapaContagem[ev.camera_id].dentro = Math.max(0, mapaContagem[ev.camera_id].dentro - 1)
+        }
+        mapaContagem[ev.camera_id].ultima_atividade = ev.criado_em
+      }
+
+      const contagensArr = Object.values(mapaContagem)
+      setContagens(contagensArr)
+
+      // Totais gerais
+      const totalEntradas = contagensArr.reduce((s, c) => s + c.entradas, 0)
+      const totalSaidas   = contagensArr.reduce((s, c) => s + c.saidas, 0)
+      const totalDentro   = contagensArr.reduce((s, c) => s + c.dentro, 0)
+
+      // Pico do dia — maximo de pessoas dentro ao mesmo tempo
+      let pico = 0; let atual = 0
+      for (const ev of eventos) {
+        if (ev.tipo === 'entrada') { atual++; pico = Math.max(pico, atual) }
+        else if (ev.tipo === 'saida') { atual = Math.max(0, atual - 1) }
+      }
+      setTotalHoje({ entradas: totalEntradas, saidas: totalSaidas, dentro: totalDentro, pico })
+
+      // Agrupa por hora para o grafico
+      const mapaHoras: Record<string, { entradas: number; saidas: number }> = {}
+      for (const ev of eventos) {
+        const hora = new Date(ev.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '00' })
+        if (!mapaHoras[hora]) mapaHoras[hora] = { entradas: 0, saidas: 0 }
+        if (ev.tipo === 'entrada') mapaHoras[hora].entradas++
+        else mapaHoras[hora].saidas++
+      }
+      const porHoraArr = Object.entries(mapaHoras)
+        .map(([hora, v]) => ({ hora, ...v }))
+        .sort((a, b) => a.hora.localeCompare(b.hora))
+      setPorHora(porHoraArr)
+
+      setUltimaAtualizacao(new Date().toLocaleTimeString('pt-BR'))
+    } catch (e) {
+      console.error(e)
+    }
+    setCarregando(false)
+  }, [usuario])
+
+  useEffect(() => { carregar() }, [carregar])
 
   useEffect(() => {
-    if (!authCarregando) carregarCameras()
-  }, [authCarregando])
-
-  useEffect(() => {
-    if (!cameraSelecionada) return
-    const interval = setInterval(() => carregarContagem(cameraSelecionada.id), 5000)
+    if (!autoRefresh) return
+    const interval = setInterval(carregar, 15000)
     return () => clearInterval(interval)
-  }, [cameraSelecionada])
+  }, [autoRefresh, carregar])
 
-  async function carregarCameras() {
-    const data = await fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json())
-    setCameras(Array.isArray(data) ? data : [])
-  }
-
-  async function selecionarCamera(camera: Camera) {
-    setCameraSelecionada(camera)
-    setLinha(null)
-    setPontoA(null)
-    setSnapshot(null)
-    setContagem(null)
-    setSnapshot(`${API}/cameras/${camera.id}/snapshot?t=${Date.now()}`)
-    try {
-      const res = await fetch(`${API}/contagem/${camera.id}`)
-      if (res.ok) {
-        const data = await res.json()
-        setLinhaSalva(data)
-        setLinha(data)
-      } else {
-        setLinhaSalva(null)
-      }
-    } catch { setLinhaSalva(null) }
-    carregarContagem(camera.id)
-  }
-
-  async function carregarContagem(cameraId: string) {
-    try {
-      const res = await fetch(`${API}/contagem/${cameraId}/contagem`)
-      if (res.ok) setContagem(await res.json())
-    } catch {}
-  }
-
-  useEffect(() => { desenharCanvas() }, [snapshot, linha, pontoA])
-
-  function desenharCanvas() {
-    const canvas = canvasRef.current
-    const img    = imgRef.current
-    if (!canvas || !img) return
-    if (!img.naturalWidth && !img.complete) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    canvas.width  = img.naturalWidth  || img.width
-    canvas.height = img.naturalHeight || img.height
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-    const w = canvas.width
-    const h = canvas.height
-
-    if (linhaSalva && !linha) {
-      ctx.strokeStyle = '#6B7280'
-      ctx.lineWidth   = 2
-      ctx.setLineDash([5, 5])
-      ctx.beginPath()
-      ctx.moveTo(linhaSalva.x1 * w, linhaSalva.y1 * h)
-      ctx.lineTo(linhaSalva.x2 * w, linhaSalva.y2 * h)
-      ctx.stroke()
-      ctx.setLineDash([])
-    }
-
-    if (linha) {
-      ctx.strokeStyle = '#FBBF24'
-      ctx.lineWidth   = 3
-      ctx.setLineDash([])
-      ctx.beginPath()
-      ctx.moveTo(linha.x1 * w, linha.y1 * h)
-      ctx.lineTo(linha.x2 * w, linha.y2 * h)
-      ctx.stroke()
-
-      ctx.fillStyle = '#10B981'
-      ctx.beginPath()
-      ctx.arc(linha.x1 * w, linha.y1 * h, 8, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = 'white'
-      ctx.font = 'bold 12px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('A', linha.x1 * w, linha.y1 * h + 4)
-
-      ctx.fillStyle = '#EF4444'
-      ctx.beginPath()
-      ctx.arc(linha.x2 * w, linha.y2 * h, 8, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = 'white'
-      ctx.fillText('B', linha.x2 * w, linha.y2 * h + 4)
-
-      const mx = (linha.x1 + linha.x2) / 2 * w
-      const my = (linha.y1 + linha.y2) / 2 * h
-      ctx.fillStyle = '#FBBF24'
-      ctx.font = 'bold 14px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('-> entrada', mx + 20, my - 10)
-    }
-
-    if (pontoA && !linha) {
-      ctx.fillStyle = '#10B981'
-      ctx.beginPath()
-      ctx.arc(pontoA.x * w, pontoA.y * h, 8, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = 'white'
-      ctx.font = 'bold 12px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('A', pontoA.x * w, pontoA.y * h + 4)
-    }
-  }
-
-  function handleCanvasClick(e: React.MouseEvent<HTMLCanvasElement>) {
-    if (!desenhando) return
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect  = canvas.getBoundingClientRect()
-    const scaleX = canvas.width  / rect.width
-    const scaleY = canvas.height / rect.height
-    const x = ((e.clientX - rect.left) * scaleX) / canvas.width
-    const y = ((e.clientY - rect.top)  * scaleY) / canvas.height
-
-    if (!pontoA) {
-      setPontoA({ x, y })
-    } else {
-      setLinha({ x1: pontoA.x, y1: pontoA.y, x2: x, y2: y })
-      setPontoA(null)
-      setDesenhando(false)
-    }
-  }
-
-  async function salvarLinha() {
-    if (!linha || !cameraSelecionada) return
-    setSalvando(true)
-    setMensagem('')
-    try {
-      const res = await fetch(`${API}/contagem/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          camera_id: cameraSelecionada.id,
-          x1: linha.x1, y1: linha.y1,
-          x2: linha.x2, y2: linha.y2,
-        })
-      })
-      if (res.ok) {
-        setLinhaSalva(linha)
-        setMensagem('Linha salva! O worker vai usar em ate 30 segundos.')
-      } else {
-        setMensagem('Erro ao salvar linha.')
-      }
-    } catch { setMensagem('Erro de conexao.') }
-    finally { setSalvando(false) }
-  }
-
-  function resetarLinha() {
-    setLinha(null)
-    setPontoA(null)
-    setDesenhando(false)
-    setMensagem('')
-  }
-
-  if (authCarregando) {
-    return (
-      <main className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </main>
-    )
-  }
+  const maxBarra = Math.max(...porHora.map(h => h.entradas + h.saidas), 1)
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-8">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen bg-gray-950 text-white p-6">
+      <div className="max-w-6xl mx-auto">
 
-        <div className="flex items-center justify-between mb-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-blue-400">Linha de Contagem</h1>
-            <p className="text-gray-400 mt-1">Desenhe uma linha para contar pessoas que cruzam</p>
+            <h1 className="text-2xl font-bold text-blue-400">Contagem de Pessoas</h1>
+            <p className="text-gray-400 text-sm mt-1">
+              Hoje — atualizado {ultimaAtualizacao || '...'}
+            </p>
           </div>
-          <div className="flex gap-3">
-            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition text-sm">
+          <div className="flex gap-3 items-center">
+            <button
+              onClick={() => setAutoRefresh(v => !v)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition ${autoRefresh ? 'bg-green-800 text-green-300' : 'bg-gray-700 text-gray-400'}`}
+            >
+              {autoRefresh ? 'Auto ON' : 'Auto OFF'}
+            </button>
+            <button onClick={carregar} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-bold transition">
+              Atualizar
+            </button>
+            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-bold transition">
+              Cameras
+            </Link>
+            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-bold transition">
               Dashboard
             </Link>
-            <button onClick={logout} className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300 text-sm">
-              Sair
-            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
-          {/* Lista de cameras */}
-          <div className="space-y-4">
-            <div className="bg-gray-800 rounded-xl p-4">
-              <h2 className="font-bold text-lg mb-3">Selecionar Camera</h2>
-              {cameras.length === 0 ? (
-                <p className="text-gray-400 text-sm">Nenhuma camera disponivel.</p>
-              ) : (
-                <div className="space-y-2">
-                  {cameras.filter(c => c.ativo).map(c => (
-                    <button key={c.id} onClick={() => selecionarCamera(c)}
-                      className={`w-full text-left p-3 rounded-lg transition ${
-                        cameraSelecionada?.id === c.id
-                          ? 'bg-blue-700 text-white'
-                          : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                      }`}>
-                      <p className="font-bold text-sm">{c.nome}</p>
-                      <p className="text-xs text-gray-400 truncate">{c.rtsp_url}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
+        {carregando ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* Metricas do dia */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <p className="text-gray-400 text-sm mb-1">Dentro agora</p>
+                <p className="text-4xl font-bold text-white">{totalHoje.dentro}</p>
+                <p className="text-gray-500 text-xs mt-1">pessoas</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <p className="text-gray-400 text-sm mb-1">Entradas hoje</p>
+                <p className="text-4xl font-bold text-green-400">{totalHoje.entradas}</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <p className="text-gray-400 text-sm mb-1">Saidas hoje</p>
+                <p className="text-4xl font-bold text-red-400">{totalHoje.saidas}</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <p className="text-gray-400 text-sm mb-1">Pico do dia</p>
+                <p className="text-4xl font-bold text-yellow-400">{totalHoje.pico}</p>
+                <p className="text-gray-500 text-xs mt-1">max simultaneos</p>
+              </div>
             </div>
 
-            {/* Contagem */}
-            {contagem && (
-              <div className="bg-gray-800 rounded-xl p-4">
-                <h2 className="font-bold text-lg mb-3">Contagem em Tempo Real</h2>
-                <div className="space-y-2">
-                  <div className="bg-green-900/40 rounded-lg p-3">
-                    <p className="text-green-400 text-xs font-bold">Entradas (A-B)</p>
-                    <p className="text-3xl font-bold text-green-400">{contagem.entradas}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+              {/* Por camera */}
+              <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 className="text-white font-bold mb-4">Por Camera</h2>
+                {contagens.filter(c => c.entradas > 0 || c.saidas > 0).length === 0 ? (
+                  <p className="text-gray-500 text-sm">Nenhuma movimentacao hoje. Ative o analítico "Linha de Contagem" e configure a linha no botao [R].</p>
+                ) : (
+                  <div className="space-y-3">
+                    {contagens.map(c => (
+                      <div key={c.camera_id} className="bg-gray-900 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-white font-bold text-sm">{c.nome}</span>
+                          <span className="bg-blue-900 text-blue-300 text-xs px-2 py-0.5 rounded-full font-bold">
+                            {c.dentro} dentro
+                          </span>
+                        </div>
+                        <div className="flex gap-4 text-xs">
+                          <span className="text-green-400">+{c.entradas} entradas</span>
+                          <span className="text-red-400">-{c.saidas} saidas</span>
+                          {c.ultima_atividade && (
+                            <span className="text-gray-500">ultimo: {formatarHora(c.ultima_atividade)}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="bg-red-900/40 rounded-lg p-3">
-                    <p className="text-red-400 text-xs font-bold">Saidas (B-A)</p>
-                    <p className="text-3xl font-bold text-red-400">{contagem.saidas}</p>
+                )}
+              </div>
+
+              {/* Grafico por hora */}
+              <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 className="text-white font-bold mb-4">Movimentacao por Hora</h2>
+                {porHora.length === 0 ? (
+                  <p className="text-gray-500 text-sm">Sem dados ainda.</p>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {porHora.map((h, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-gray-400 text-xs w-12 text-right">{h.hora}</span>
+                        <div className="flex-1 flex gap-1">
+                          {/* Barra entradas */}
+                          <div className="flex-1 bg-gray-700 rounded-l h-5 overflow-hidden">
+                            <div
+                              className="h-full bg-green-600 rounded-l transition-all"
+                              style={{ width: `${(h.entradas / maxBarra) * 100}%` }}
+                            />
+                          </div>
+                          {/* Barra saidas */}
+                          <div className="flex-1 bg-gray-700 rounded-r h-5 overflow-hidden">
+                            <div
+                              className="h-full bg-red-600 rounded-r transition-all"
+                              style={{ width: `${(h.saidas / maxBarra) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-gray-500 text-xs w-16 text-right">
+                          +{h.entradas} -{h.saidas}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="bg-blue-900/40 rounded-lg p-3">
-                    <p className="text-blue-400 text-xs font-bold">Saldo atual</p>
-                    <p className="text-3xl font-bold text-blue-400">{contagem.saldo}</p>
-                  </div>
+                )}
+                <div className="flex gap-4 mt-3 text-xs">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-600 rounded inline-block" /> Entradas</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-600 rounded inline-block" /> Saidas</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Instrucoes se nao tiver dados */}
+            {totalHoje.entradas === 0 && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                <h3 className="text-white font-bold mb-2">Como configurar a contagem</h3>
+                <div className="space-y-2 text-sm text-gray-400">
+                  <p>1. Va em <Link href="/cameras" className="text-blue-400 hover:underline">Cameras</Link> e clique em <span className="bg-gray-700 px-1 rounded font-mono">[R]</span> na camera da entrada</p>
+                  <p>2. Desenhe a linha virtual na imagem onde as pessoas cruzam</p>
+                  <p>3. Clique em <span className="bg-gray-700 px-1 rounded font-mono">IA</span> e ative o toggle <strong>Linha de Contagem</strong></p>
+                  <p>4. Volte aqui — as contagens aparecerão em tempo real</p>
                 </div>
               </div>
             )}
-
-            {/* Como usar */}
-            <div className="bg-gray-800 rounded-xl p-4">
-              <h2 className="font-bold mb-3">Como usar</h2>
-              <ol className="space-y-1 text-sm text-gray-400">
-                <li><span className="text-blue-400 font-bold">1.</span> Selecione uma camera</li>
-                <li><span className="text-blue-400 font-bold">2.</span> Clique em "Desenhar linha"</li>
-                <li><span className="text-blue-400 font-bold">3.</span> Clique no ponto A <span className="text-green-400">(verde)</span></li>
-                <li><span className="text-blue-400 font-bold">4.</span> Clique no ponto B <span className="text-red-400">(vermelho)</span></li>
-                <li><span className="text-blue-400 font-bold">5.</span> Clique em "Salvar linha"</li>
-                <li><span className="text-blue-400 font-bold">6.</span> A-B conta como <span className="text-green-400">entrada</span></li>
-                <li><span className="text-blue-400 font-bold">7.</span> B-A conta como <span className="text-red-400">saida</span></li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Canvas principal */}
-          <div className="col-span-2">
-            <div className="bg-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold text-lg">
-                  {cameraSelecionada ? cameraSelecionada.nome : 'Selecione uma camera'}
-                </h2>
-                {cameraSelecionada && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setDesenhando(true); setLinha(null); setPontoA(null) }}
-                      className={`px-4 py-2 rounded-lg font-bold text-sm transition ${
-                        desenhando ? 'bg-yellow-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'
-                      }`}>
-                      {desenhando
-                        ? pontoA ? 'Clique no ponto B' : 'Clique no ponto A'
-                        : 'Desenhar linha'}
-                    </button>
-                    {linha && (
-                      <>
-                        <button onClick={resetarLinha} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold text-sm transition text-white">
-                          Apagar
-                        </button>
-                        <button onClick={salvarLinha} disabled={salvando}
-                          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-2 rounded-lg font-bold text-sm transition text-white">
-                          {salvando ? 'Salvando...' : 'Salvar linha'}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {mensagem && (
-                <div className={`mb-3 p-2 rounded-lg text-sm ${mensagem.includes('Erro') ? 'bg-red-900/40 text-red-300' : 'bg-green-900/40 text-green-300'}`}>
-                  {mensagem}
-                </div>
-              )}
-
-              <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '400px' }}>
-                {snapshot ? (
-                  <>
-                    <img ref={imgRef} src={snapshot} alt="snapshot"
-                      style={{position:"absolute",opacity:0,pointerEvents:"none",width:1,height:1}}
-                      onLoad={desenharCanvas} />
-                    <canvas ref={canvasRef}
-                      className={`w-full h-auto ${desenhando ? 'cursor-crosshair' : 'cursor-default'}`}
-                      onClick={handleCanvasClick} />
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center h-64 text-gray-500">
-                    <div className="text-center">
-                      <div className="text-5xl mb-2">[ ]</div>
-                      <p>Selecione uma camera para comecar</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </main>
   )
