@@ -122,7 +122,7 @@ export default function ContagemPage() {
       // Agrupa por hora para o grafico
       const mapaHoras: Record<string, { entradas: number; saidas: number }> = {}
       for (const ev of eventos) {
-        const hora = new Date(ev.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '00' })
+        const hora = new Date(ev.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         if (!mapaHoras[hora]) mapaHoras[hora] = { entradas: 0, saidas: 0 }
         if (ev.tipo === 'entrada') mapaHoras[hora].entradas++
         else mapaHoras[hora].saidas++
@@ -296,3 +296,4 @@ export default function ContagemPage() {
     </main>
   )
 }
+
