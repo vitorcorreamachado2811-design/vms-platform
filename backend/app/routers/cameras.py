@@ -131,9 +131,40 @@ class RemoverCamera(BaseModel):
     camera_id: UUID
 
 
-@router.get("/ping")
-def ping():
-    return {"ok": True}
+import os
+
+MEDIAMTX_URL = os.environ.get("MEDIAMTX_URL", "")
+
+
+@router.post("/{camera_id}/webrtc")
+async def webrtc_proxy(camera_id: str, request: Request):
+    """
+    Proxy WHEP para o MediaMTX — resolve CORS entre Vercel e Railway.
+    Frontend envia SDP offer aqui, backend repassa para o MediaMTX.
+    """
+    if not MEDIAMTX_URL:
+        raise HTTPException(status_code=503, detail="MediaMTX nao configurado")
+
+    import urllib.request
+    sdp = await request.body()
+
+    whep_url = f"{MEDIAMTX_URL}/{camera_id}/whep"
+    try:
+        req = urllib.request.Request(
+            whep_url,
+            data=sdp,
+            headers={"Content-Type": "application/sdp"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            answer_sdp = resp.read()
+            return Response(
+                content=answer_sdp,
+                media_type="application/sdp",
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro MediaMTX: {e}")
 
 
 @router.get("/", response_model=list[CameraResponse])

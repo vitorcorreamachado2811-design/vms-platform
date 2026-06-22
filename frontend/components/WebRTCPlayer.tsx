@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 
-// URL do MediaMTX — configurar via variavel de ambiente
-const MEDIAMTX_URL = process.env.NEXT_PUBLIC_MEDIAMTX_URL || 'http://localhost:8889'
+// URL do MediaMTX via backend proxy — evita CORS
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 
 interface WebRTCPlayerProps {
   cameraId: string
@@ -69,8 +69,8 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
         setTimeout(resolve, 3000) // timeout de seguranca
       })
 
-      // Envia offer para o MediaMTX
-      const res = await fetch(`${MEDIAMTX_URL}/${cameraId}/whep`, {
+      // Envia offer para o backend que faz proxy para o MediaMTX
+      const res = await fetch(`${API_BASE}/cameras/${cameraId}/webrtc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/sdp' },
         body: pc.localDescription?.sdp,
