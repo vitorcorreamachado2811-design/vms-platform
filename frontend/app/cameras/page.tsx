@@ -575,7 +575,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtual
         <ModalEditar camera={camera} onClose={() => setShowEditar(false)} onSalvo={onCameraAtualizada} />
       )}
       {aoVivo && (
-        <WebRTCPlayer camera={camera} onClose={() => setCameraAoVivoId(null)} />
+        <WebRTCPlayer cameraId={camera.id} cameraName={camera.nome} onClose={() => setCameraAoVivoId(null)} />
       )}
 
       <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
@@ -682,4 +682,5 @@ export default function CamerasPage() {
     </main>
   )
 }
+
 
