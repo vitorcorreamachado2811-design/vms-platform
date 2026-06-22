@@ -787,6 +787,46 @@ def processar_camera(camera):
             time.sleep(10)
 
 
+MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "")
+
+_publisher_status: dict = {}
+_publisher_procs: dict  = {}
+
+def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
+    """Publica camera no MediaMTX via ffmpeg para distribuicao WebRTC."""
+    if not MEDIAMTX_RTSP:
+        return
+    destino = f"{MEDIAMTX_RTSP}/{camera_id}"
+    print(f"[PUBLISHER] {nome} -> {destino}", flush=True)
+    while _publisher_status.get(camera_id, {}).get("rodando"):
+        proc = None
+        try:
+            proc = subprocess.Popen([
+                "ffmpeg", "-loglevel", "error",
+                "-rtsp_transport", "tcp", "-i", rtsp_url,
+                "-c:v", "copy", "-an",
+                "-f", "rtsp", "-rtsp_transport", "tcp", destino
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _publisher_procs[camera_id] = proc
+            while _publisher_status.get(camera_id, {}).get("rodando"):
+                if proc.poll() is not None: break
+                time.sleep(2)
+        except Exception as e:
+            print(f"[PUBLISHER] Erro {nome}: {e}", flush=True)
+        finally:
+            if proc:
+                try: proc.kill()
+                except: pass
+        if _publisher_status.get(camera_id, {}).get("rodando"):
+            time.sleep(3)
+
+def iniciar_publisher(camera_id: str, rtsp_url: str, nome: str):
+    if not MEDIAMTX_RTSP or _publisher_status.get(camera_id, {}).get("rodando"):
+        return
+    _publisher_status[camera_id] = {"rodando": True}
+    threading.Thread(target=_thread_publisher, args=(camera_id, rtsp_url, nome), daemon=True).start()
+
+
 # ---------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------
@@ -806,6 +846,8 @@ def main():
 
     threads = []
     for camera in cameras:
+        # Publica no MediaMTX para WebRTC (se configurado)
+        iniciar_publisher(camera["id"], camera["rtsp_url"], camera["nome"])
         t = threading.Thread(target=processar_camera, args=(camera,), daemon=True)
         t.start(); threads.append(t)
         print(f"Thread iniciada: {camera['nome']}", flush=True)
