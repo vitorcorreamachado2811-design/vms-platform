@@ -802,9 +802,8 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
         proc = None
         try:
             proc = subprocess.Popen([
-                "ffmpeg", "-loglevel", "error",
+                "ffmpeg", "-loglevel", "warning",
                 "-rtsp_transport", "tcp", "-i", rtsp_url,
-                # Força H.264 — necessario para WebRTC
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
                 "-tune", "zerolatency",
@@ -812,10 +811,13 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
                 "-an",
                 "-f", "rtsp",
                 "-rtsp_transport", "tcp", destino
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             _publisher_procs[camera_id] = proc
             while _publisher_status.get(camera_id, {}).get("rodando"):
-                if proc.poll() is not None: break
+                if proc.poll() is not None:
+                    err = proc.stderr.read(500).decode('utf-8', errors='ignore')
+                    print(f"[PUBLISHER] {nome} erro ffmpeg: {err}", flush=True)
+                    break
                 time.sleep(2)
         except Exception as e:
             print(f"[PUBLISHER] Erro {nome}: {e}", flush=True)
