@@ -109,6 +109,8 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
+    // Notifica backend que viewer fechou
+    fetch(`${API_BASE}/cameras/${cameraId}/webrtc`, { method: 'DELETE' }).catch(() => {})
   }
 
   return (

@@ -852,8 +852,6 @@ def main():
 
     threads = []
     for camera in cameras:
-        # Publica no MediaMTX para WebRTC (se configurado)
-        iniciar_publisher(camera["id"], camera["rtsp_url"], camera["nome"])
         t = threading.Thread(target=processar_camera, args=(camera,), daemon=True)
         t.start(); threads.append(t)
         print(f"Thread iniciada: {camera['nome']}", flush=True)

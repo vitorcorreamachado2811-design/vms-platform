@@ -133,38 +133,131 @@ class RemoverCamera(BaseModel):
 
 import os
 
-MEDIAMTX_URL = os.environ.get("MEDIAMTX_URL", "")
+MEDIAMTX_URL  = os.environ.get("MEDIAMTX_URL", "")
+MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
+
+# Publisher sob demanda — so roda quando alguem esta assistindo
+_publisher_procs: dict  = {}
+_publisher_locks: dict  = {}
+_publisher_viewers: dict = {}  # {camera_id: count}
+_pub_lock = threading.Lock()
+
+
+def _iniciar_publisher_camera(camera_id: str, rtsp_url: str, nome: str):
+    """Inicia o ffmpeg publisher para uma camera especifica."""
+    destino = f"{MEDIAMTX_RTSP}/{camera_id}"
+    print(f"[PUBLISHER] Iniciando {nome} -> {destino}", flush=True)
+
+    while _publisher_viewers.get(camera_id, 0) > 0:
+        proc = None
+        try:
+            proc = subprocess.Popen([
+                "ffmpeg", "-loglevel", "error",
+                "-rtsp_transport", "tcp",
+                "-i", rtsp_url,
+                "-vf", "scale=640:360",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "zerolatency",
+                "-crf", "30",
+                "-maxrate", "500k",
+                "-bufsize", "500k",
+                "-g", "30",
+                "-an",
+                "-f", "rtsp",
+                "-rtsp_transport", "tcp", destino
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _publisher_procs[camera_id] = proc
+
+            while _publisher_viewers.get(camera_id, 0) > 0:
+                if proc.poll() is not None:
+                    break
+                time.sleep(2)
+        except Exception as e:
+            print(f"[PUBLISHER] Erro {nome}: {e}", flush=True)
+        finally:
+            if proc:
+                try: proc.kill()
+                except: pass
+
+        if _publisher_viewers.get(camera_id, 0) > 0:
+            time.sleep(2)
+
+    print(f"[PUBLISHER] Parando {nome}", flush=True)
+    if camera_id in _publisher_procs:
+        try: _publisher_procs[camera_id].kill()
+        except: pass
+        del _publisher_procs[camera_id]
+
+
+def adicionar_viewer(camera_id: str, rtsp_url: str, nome: str):
+    with _pub_lock:
+        _publisher_viewers[camera_id] = _publisher_viewers.get(camera_id, 0) + 1
+        if _publisher_viewers[camera_id] == 1:
+            t = threading.Thread(
+                target=_iniciar_publisher_camera,
+                args=(camera_id, rtsp_url, nome),
+                daemon=True
+            )
+            t.start()
+
+
+def remover_viewer(camera_id: str):
+    with _pub_lock:
+        count = _publisher_viewers.get(camera_id, 0)
+        _publisher_viewers[camera_id] = max(0, count - 1)
 
 
 @router.post("/{camera_id}/webrtc")
-async def webrtc_proxy(camera_id: str, request: Request):
+async def webrtc_proxy(camera_id: str, request: Request, db: Session = Depends(get_db)):
     """
-    Proxy WHEP para o MediaMTX — resolve CORS entre Vercel e Railway.
-    Frontend envia SDP offer aqui, backend repassa para o MediaMTX.
+    Proxy WHEP para o MediaMTX.
+    Inicia o publisher ffmpeg sob demanda quando alguem abre o player.
     """
     if not MEDIAMTX_URL:
         raise HTTPException(status_code=503, detail="MediaMTX nao configurado")
 
+    # Busca dados da camera para iniciar o publisher
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera nao encontrada")
+
+    # Inicia publisher sob demanda
+    adicionar_viewer(camera_id, camera.rtsp_url, camera.nome)
+
+    # Aguarda o stream estar disponivel no MediaMTX (max 10s)
     import urllib.request
+    whep_url = f"{MEDIAMTX_URL}/{camera_id}/whep"
     sdp = await request.body()
 
-    whep_url = f"{MEDIAMTX_URL}/{camera_id}/whep"
-    try:
-        req = urllib.request.Request(
-            whep_url,
-            data=sdp,
-            headers={"Content-Type": "application/sdp"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            answer_sdp = resp.read()
-            return Response(
-                content=answer_sdp,
-                media_type="application/sdp",
-                headers={"Access-Control-Allow-Origin": "*"}
+    for tentativa in range(5):
+        try:
+            req = urllib.request.Request(
+                whep_url,
+                data=sdp,
+                headers={"Content-Type": "application/sdp"},
+                method="POST"
             )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erro MediaMTX: {e}")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                answer_sdp = resp.read()
+                return Response(
+                    content=answer_sdp,
+                    media_type="application/sdp",
+                    headers={"Access-Control-Allow-Origin": "*"}
+                )
+        except Exception as e:
+            if tentativa < 4:
+                time.sleep(2)
+            else:
+                remover_viewer(camera_id)
+                raise HTTPException(status_code=502, detail=f"Erro MediaMTX: {e}")
+
+
+@router.delete("/{camera_id}/webrtc")
+async def webrtc_stop(camera_id: str):
+    """Notifica que o viewer fechou o player."""
+    remover_viewer(camera_id)
+    return {"ok": True}
 
 
 @router.get("/", response_model=list[CameraResponse])
