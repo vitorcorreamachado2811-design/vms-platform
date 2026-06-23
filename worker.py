@@ -804,8 +804,14 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
             proc = subprocess.Popen([
                 "ffmpeg", "-loglevel", "error",
                 "-rtsp_transport", "tcp", "-i", rtsp_url,
-                "-c:v", "copy", "-an",
-                "-f", "rtsp", "-rtsp_transport", "tcp", destino
+                # Força H.264 — necessario para WebRTC
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "zerolatency",
+                "-b:v", "800k",
+                "-an",
+                "-f", "rtsp",
+                "-rtsp_transport", "tcp", destino
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             _publisher_procs[camera_id] = proc
             while _publisher_status.get(camera_id, {}).get("rodando"):
