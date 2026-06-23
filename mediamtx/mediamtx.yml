@@ -1,34 +1,18 @@
-# MediaMTX Configuration
-logLevel: info
+﻿logLevel: info
 logDestinations: [stdout]
-
-# Portas
 rtspAddress: :8554
 rtmpAddress: :1935
 hlsAddress: :8888
 webrtcAddress: :8889
 apiAddress: :9997
-
-# Habilitar protocolos
 rtsp: yes
 rtmp: yes
 hls: yes
 webrtc: yes
 api: yes
-
-# HLS config
 hlsSegmentCount: 3
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
-
-# Sem autenticacao
-auth:
-  internal:
-    users: []
-
-# Aceita qualquer stream
 paths:
   all_others:
     {}
-
-# updated
