@@ -804,7 +804,6 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
             proc = subprocess.Popen([
                 "ffmpeg", "-loglevel", "warning",
                 "-rtsp_transport", "tcp",
-                "-hwaccel", "auto",
                 "-i", rtsp_url,
                 "-vf", "scale=640:360",
                 "-c:v", "libx264",
