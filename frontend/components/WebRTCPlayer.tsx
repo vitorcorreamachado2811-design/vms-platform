@@ -39,9 +39,20 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
       pc.ontrack = (evt) => {
         if (videoRef.current && evt.streams[0]) {
           videoRef.current.srcObject = evt.streams[0]
-          videoRef.current.play().catch(() => {})
-          setStatus('live')
-          setLatency(Date.now() - startRef.current)
+          videoRef.current.play()
+            .then(() => {
+              setStatus('live')
+              setLatency(Date.now() - startRef.current)
+            })
+            .catch((e) => {
+              console.error('[WebRTC] Play error:', e)
+              // Tenta sem audio
+              videoRef.current!.muted = true
+              videoRef.current!.play().then(() => {
+                setStatus('live')
+                setLatency(Date.now() - startRef.current)
+              })
+            })
         }
       }
 
