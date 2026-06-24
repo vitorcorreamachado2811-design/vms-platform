@@ -653,7 +653,7 @@ def processar_camera(camera):
             frame = get_frame_atual(camera_id)
             if frame is None:
                 print(f"[{nome}] Aguardando frame da captura continua...", flush=True)
-            time.sleep(0.5)
+                time.sleep(2)
                 continue
 
             h, w    = frame.shape[:2]
