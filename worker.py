@@ -94,7 +94,7 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
 
     destino = f"{MEDIAMTX_RTSP}/{camera_id}"
     cmd = [
-        "ffmpeg", "-loglevel", "error",
+        "ffmpeg", "-loglevel", "warning",
         "-rtsp_transport", "tcp",
         "-i", rtsp_url,
         "-c", "copy",
@@ -103,9 +103,16 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
         "-rtsp_transport", "tcp",
         destino
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     _hls_processos[camera_id] = proc
     print(f"[HLS] Publicando {camera_id} -> {destino}", flush=True)
+
+    def _monitor_hls(p, cid):
+        err = p.stderr.read(300).decode('utf-8', errors='ignore')
+        if err:
+            print(f"[HLS] Erro {cid}: {err}", flush=True)
+
+    threading.Thread(target=_monitor_hls, args=(proc, camera_id), daemon=True).start()
 
 def parar_hls(camera_id: str):
     if camera_id in _hls_processos:
