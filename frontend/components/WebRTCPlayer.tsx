@@ -59,7 +59,7 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
       pc.oniceconnectionstatechange = () => {
         if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
           setStatus('error')
-          setTimeout(() => conectar(), 3000)
+          setTimeout(() => conectar(), 8000)  // Aumentado para 8s
         }
       }
 
@@ -97,7 +97,7 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
     } catch (e) {
       console.error('[WebRTC] Erro:', e)
       setStatus('error')
-      setTimeout(() => conectar(), 3000)
+      setTimeout(() => conectar(), 8000)
     }
   }
 
