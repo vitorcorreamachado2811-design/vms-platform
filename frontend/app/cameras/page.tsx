@@ -97,7 +97,7 @@ function BtnIcon({ onClick, title, children, className = '' }: {
   )
 }
 
-// ─── MODAL EDITAR CAMERA ────────────────────────────────────────────────────
+// â”€â”€â”€ MODAL EDITAR CAMERA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalEditar({ camera, onClose, onSalvo }: {
   camera: Camera
   onClose: () => void
@@ -180,7 +180,7 @@ function ModalEditar({ camera, onClose, onSalvo }: {
   )
 }
 
-// ─── MODAL REGIOES ───────────────────────────────────────────────────────────
+// â”€â”€â”€ MODAL REGIOES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
@@ -200,7 +200,7 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
       .then(data => setRegioes(Array.isArray(data) ? data : []))
       .catch(() => {})
 
-    // Usa frame ao vivo em vez de snapshot — mais rapido e confiavel
+    // Usa frame ao vivo em vez de snapshot â€” mais rapido e confiavel
     const img = new Image()
     img.crossOrigin = 'anonymous'
     // Tenta frame ao vivo primeiro, fallback para snapshot
@@ -398,7 +398,7 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
   )
 }
 
-// ─── PAINEL ANALITICOS ───────────────────────────────────────────────────────
+// â”€â”€â”€ PAINEL ANALITICOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: () => void }) {
   const [analiticos, setAnaliticos] = useState<Analiticos>(ANALITICOS_DEFAULT)
   const [salvando, setSalvando] = useState(false)
@@ -449,7 +449,7 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
   )
 }
 
-// ─── MJPEG PLAYER ───────────────────────────────────────────────────────────
+// â”€â”€â”€ MJPEG PLAYER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const imgRef = useRef<HTMLImageElement>(null)
   const [status, setStatus] = useState<'connecting' | 'live' | 'error'>('connecting')
@@ -549,7 +549,7 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
   )
 }
 
-// ─── CAMERA PLAYER CARD ──────────────────────────────────────────────────────
+// â”€â”€â”€ CAMERA PLAYER CARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtualizada }: {
   camera: Camera
   cameraAoVivoId: string | null
@@ -575,7 +575,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtual
         <ModalEditar camera={camera} onClose={() => setShowEditar(false)} onSalvo={onCameraAtualizada} />
       )}
       {aoVivo && (
-        <HLSPlayer cameraId={camera.id} cameraName={camera.nome} onClose={() => setCameraAoVivoId(null)} />
+        <WebRTCPlayer cameraId={camera.id} cameraName={camera.nome} onClose={() => setCameraAoVivoId(null)} />
       )}
 
       <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
@@ -622,7 +622,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtual
   )
 }
 
-// ─── PAGE ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function CamerasPage() {
   const { usuario } = useAuth()
   const [cameras, setCameras] = useState<Camera[]>([])
