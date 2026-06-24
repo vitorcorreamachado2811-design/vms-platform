@@ -12,11 +12,7 @@ hls: yes
 webrtc: yes
 api: yes
 
-# CORS — permite acesso do frontend Vercel
 hlsAllowOrigin: '*'
-
-# Sem autenticacao por cookie
-authMethod: no
 
 hlsSegmentCount: 7
 hlsSegmentDuration: 1s
