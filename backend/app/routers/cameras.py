@@ -208,18 +208,6 @@ def remover_viewer(camera_id: str):
         _publisher_viewers[camera_id] = max(0, count - 1)
 
 
-
-@router.options("/{camera_id}/webrtc")
-async def webrtc_options(camera_id: str):
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
-
 @router.post("/{camera_id}/webrtc")
 async def webrtc_proxy(camera_id: str, request: Request, db: Session = Depends(get_db)):
     """
@@ -242,7 +230,7 @@ async def webrtc_proxy(camera_id: str, request: Request, db: Session = Depends(g
     whep_url = f"{MEDIAMTX_URL}/{camera_id}/whep"
     sdp = await request.body()
 
-    for tentativa in range(5):
+    for tentativa in range(15):
         try:
             req = urllib.request.Request(
                 whep_url,
@@ -258,7 +246,7 @@ async def webrtc_proxy(camera_id: str, request: Request, db: Session = Depends(g
                     headers={"Access-Control-Allow-Origin": "*"}
                 )
         except Exception as e:
-            if tentativa < 4:
+            if tentativa < 14:
                 time.sleep(2)
             else:
                 remover_viewer(camera_id)
@@ -585,4 +573,3 @@ def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
         except Exception:
             pass
     raise HTTPException(status_code=503, detail="Snapshot nao disponivel")
-
