@@ -40,7 +40,7 @@ COZINHA_DURACAO_MIN   = 10
 
 PRE_EVENTO_SEG = 10
 POS_EVENTO_SEG = 10
-FPS_BUFFER     = 15
+FPS_BUFFER     = 5
 MAX_BUFFER     = PRE_EVENTO_SEG * FPS_BUFFER
 
 _buffers: dict = {}
@@ -653,7 +653,7 @@ def processar_camera(camera):
             frame = get_frame_atual(camera_id)
             if frame is None:
                 print(f"[{nome}] Aguardando frame da captura continua...", flush=True)
-                time.sleep(2)
+            time.sleep(0.5)
                 continue
 
             h, w    = frame.shape[:2]
