@@ -95,7 +95,8 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
     destino = f"{MEDIAMTX_RTSP}/{camera_id}"
     cmd = [
         "ffmpeg", "-loglevel", "warning",
-        "-fflags", "+genpts",
+        "-fflags", "+genpts+discardcorrupt",
+        "-use_wallclock_as_timestamps", "1",
         "-rtsp_transport", "tcp",
         "-i", rtsp_url,
         "-c:v", "copy",
@@ -815,7 +816,9 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
         try:
             proc = subprocess.Popen([
                 "ffmpeg", "-loglevel", "warning",
-                "-rtsp_transport", "tcp",
+                "ffmpeg", "-loglevel", "warning",
+                "-fflags", "+genpts+discardcorrupt",
+                "-use_wallclock_as_timestamps", "1",
                 "-i", rtsp_url,
                 "-c", "copy",
                 "-an",
