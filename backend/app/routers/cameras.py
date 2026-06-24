@@ -250,7 +250,7 @@ async def webrtc_proxy(camera_id: str, request: Request, db: Session = Depends(g
                 time.sleep(2)
             else:
                 remover_viewer(camera_id)
-                raise HTTPException(status_code=502, detail=f"Erro MediaMTX: {e}")
+                return Response(content=f'Erro MediaMTX: {e}', status_code=502, headers={'Access-Control-Allow-Origin': '*'})
 
 
 @router.delete("/{camera_id}/webrtc")
@@ -573,3 +573,4 @@ def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
         except Exception:
             pass
     raise HTTPException(status_code=503, detail="Snapshot nao disponivel")
+
