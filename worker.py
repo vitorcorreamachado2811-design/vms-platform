@@ -95,11 +95,11 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
     destino = f"{MEDIAMTX_RTSP}/{camera_id}"
     cmd = [
         "ffmpeg", "-loglevel", "warning",
+        "-fflags", "+genpts",
         "-rtsp_transport", "tcp",
         "-i", rtsp_url,
-        "-c", "copy",
+        "-c:v", "copy",
         "-an",
-        "-use_wallclock_as_timestamps", "1",
         "-f", "rtsp",
         "-rtsp_transport", "tcp",
         destino
