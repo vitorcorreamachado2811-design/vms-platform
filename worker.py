@@ -82,26 +82,30 @@ def agendar_publish(camera_id: str, frame):
     _publish_pool.submit(publish_live_frame, camera_id, frame.copy())
 
 
+MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
+
 _hls_processos: dict = {}
 
 def iniciar_hls(camera_id: str, rtsp_url: str):
+    """Publica camera no MediaMTX via RTSP. MediaMTX converte para HLS automaticamente."""
     if camera_id in _hls_processos:
         try: _hls_processos[camera_id].kill()
         except: pass
-    hls_dir = f"/tmp/hls/{camera_id}"
-    os.makedirs(hls_dir, exist_ok=True)
+
+    destino = f"{MEDIAMTX_RTSP}/{camera_id}"
     cmd = [
-        "ffmpeg", "-y", "-rtsp_transport", "tcp", "-i", rtsp_url,
-        "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-        "-b:v", "600k", "-s", "640x360", "-g", "15",
-        "-hls_time", "1", "-hls_list_size", "3",
-        "-hls_flags", "delete_segments+omit_endlist",
-        "-hls_segment_filename", f"{hls_dir}/seg%03d.ts",
-        f"{hls_dir}/index.m3u8"
+        "ffmpeg", "-loglevel", "error",
+        "-rtsp_transport", "tcp",
+        "-i", rtsp_url,
+        "-c", "copy",
+        "-an",
+        "-f", "rtsp",
+        "-rtsp_transport", "tcp",
+        destino
     ]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     _hls_processos[camera_id] = proc
-    print(f"[HLS] Iniciado para {camera_id}", flush=True)
+    print(f"[HLS] Publicando {camera_id} -> {destino}", flush=True)
 
 def parar_hls(camera_id: str):
     if camera_id in _hls_processos:
