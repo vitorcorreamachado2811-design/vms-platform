@@ -99,6 +99,7 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
         "-i", rtsp_url,
         "-c", "copy",
         "-an",
+        "-use_wallclock_as_timestamps", "1",
         "-f", "rtsp",
         "-rtsp_transport", "tcp",
         destino
