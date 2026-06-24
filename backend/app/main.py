@@ -14,8 +14,12 @@ app = FastAPI(title="VMS Platform API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    
+    expose_headers=["*"],
+    
+    
 )
 
 app.include_router(empresas.router, prefix="/empresas", tags=["Empresas"])
@@ -33,5 +37,6 @@ app.include_router(habitos.router, prefix="/habitos", tags=["Hábitos"])
 @app.get("/")
 def root():
     return {"status": "ok", "sistema": "VMS Platform"}
+
 
 
