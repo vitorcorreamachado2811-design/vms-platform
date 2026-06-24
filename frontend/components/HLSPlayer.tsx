@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useEffect, useRef, useState } from 'react'
 
 const MEDIAMTX_URL = process.env.NEXT_PUBLIC_MEDIAMTX_URL || 'https://wonderful-laughter-production-5858.up.railway.app'
@@ -58,10 +58,14 @@ export function HLSPlayer({ cameraId, cameraName, onClose }: HLSPlayerProps) {
       }
 
       const hls = new Hls({
-        liveSyncDurationCount: 1,
-        liveMaxLatencyDurationCount: 3,
+        liveSyncDurationCount: 2,
+        liveMaxLatencyDurationCount: 4,
         lowLatencyMode: true,
         backBufferLength: 0,
+        // Sem cookies — resolve o cookieCheck bloqueado
+        xhrSetup: (xhr: XMLHttpRequest) => {
+          xhr.withCredentials = false
+        },
       })
 
       hlsRef.current = hls

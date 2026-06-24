@@ -1,18 +1,27 @@
-logLevel: info
+﻿logLevel: info
 logDestinations: [stdout]
 rtspAddress: :8554
 rtmpAddress: :1935
 hlsAddress: :8888
 webrtcAddress: :8889
 apiAddress: :9997
+
 rtsp: yes
 rtmp: yes
 hls: yes
 webrtc: yes
 api: yes
+
+# CORS — permite acesso do frontend Vercel
+hlsAllowOrigin: '*'
+
+# Sem autenticacao por cookie
+authMethod: no
+
 hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
+
 paths:
   all_others:
     {}
