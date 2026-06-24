@@ -13,22 +13,9 @@ webrtc: yes
 api: yes
 
 hlsAllowOrigin: '*'
-hlsAlwaysRemuxMuxer: yes
-
 hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
-
-auth:
-  internalUsers:
-    - user: any
-      pass:
-      ips: []
-      permissions:
-        - action: read
-          path:
-        - action: publish
-          path:
 
 paths:
   all_others:
