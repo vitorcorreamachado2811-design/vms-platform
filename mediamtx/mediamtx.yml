@@ -17,6 +17,8 @@ hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
 
+webrtcAllowOrigin: '*'
+
 authInternalUsers:
   - user: any
     pass:
