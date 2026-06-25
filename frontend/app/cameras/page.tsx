@@ -666,8 +666,9 @@ export default function CamerasPage() {
         ) : cameras.length === 0 ? (
           <div className="text-center py-20 text-gray-400">Nenhuma camera cadastrada.</div>
         ) : (
-          <DashboardAoVivo />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-6">
+            <DashboardAoVivo />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {cameras.map(camera => (
               <CameraPlayer
                 key={camera.id}
@@ -677,8 +678,8 @@ export default function CamerasPage() {
                 onCameraAtualizada={onCameraAtualizada}
               />
             ))}
+            </div>
           </div>
-        )}
       </div>
     </main>
   )
