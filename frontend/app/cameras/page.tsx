@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { WebRTCPlayer } from '../../components/WebRTCPlayer'
+import { DashboardAoVivo } from '../../components/DashboardAoVivo'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
 
