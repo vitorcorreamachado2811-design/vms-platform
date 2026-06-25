@@ -56,7 +56,6 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
       })
       const res = await fetch(`${MEDIAMTX_URL}/${cameraId}/whep`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/sdp' },
         body: pc.localDescription?.sdp,
       })
       if (!res.ok) throw new Error(`MediaMTX: ${res.status}`)
