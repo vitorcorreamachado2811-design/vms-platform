@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
@@ -34,7 +35,7 @@ interface Contagem {
   dentro: number
 }
 
-export function DashboardAoVivo() {
+export const DashboardAoVivo = React.memo(function DashboardAoVivo() {
   const [eventos, setEventos] = useState<Evento[]>([])
   const [contagem, setContagem] = useState<Record<string, Contagem>>({})
   const [totalHoje, setTotalHoje] = useState({ entradas: 0, saidas: 0, alertas: 0 })
@@ -213,4 +214,4 @@ export function DashboardAoVivo() {
       )}
     </div>
   )
-}
+})
