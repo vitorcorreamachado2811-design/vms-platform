@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 
-const MEDIAMTX_URL = process.env.NEXT_PUBLIC_MEDIAMTX_URL || 'https://wonderful-laughter-production-5858.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 
 interface WebRTCPlayerProps {
   cameraId: string
@@ -54,11 +54,12 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
         pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve() }
         setTimeout(resolve, 3000)
       })
-      const res = await fetch(`${MEDIAMTX_URL}/${cameraId}/whep`, {
+      const res = await fetch(`${API}/cameras/${cameraId}/webrtc`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
         body: pc.localDescription?.sdp,
       })
-      if (!res.ok) throw new Error(`MediaMTX: ${res.status}`)
+      if (!res.ok) throw new Error(`Backend: ${res.status}`)
       const answerSdp = await res.text()
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
     } catch (e) {
