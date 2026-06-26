@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.routers import cameras, empresas, auth, eventos, contagem, heatmap, regioes
@@ -9,7 +9,7 @@ from app.routers import caixa
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="VMS Platform API", version="1.0.0")
+app = FastAPI(title="VMS Platform API", version="1.0.1")
 
 app.add_middleware(
     CORSMiddleware,
