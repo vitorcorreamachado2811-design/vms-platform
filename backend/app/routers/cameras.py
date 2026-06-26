@@ -239,7 +239,7 @@ async def webrtc_proxy(camera_id: str, request: Request, db: Session = Depends(g
                 method="POST"
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
-                answer_sdp = resp.read()
+                answer_sdp = resp.read().decode('utf-8')
                 return Response(
                     content=answer_sdp,
                     media_type="application/sdp",
