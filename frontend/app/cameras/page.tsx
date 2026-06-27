@@ -551,11 +551,12 @@ function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void 
 }
 
 // ─── CAMERA PLAYER CARD ──────────────────────────────────────────────────────
-function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtualizada }: {
+function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtualizada, podeEditar }: {
   camera: Camera
   cameraAoVivoId: string | null
   setCameraAoVivoId: (id: string | null) => void
   onCameraAtualizada: (c: Camera) => void
+  podeEditar?: boolean
 }) {
   const aoVivo = cameraAoVivoId === camera.id
   const [showAnaliticos, setShowAnaliticos] = useState(false)
@@ -608,10 +609,9 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtual
               className="bg-gray-700 hover:bg-emerald-700 text-emerald-300">
               [R]
             </BtnIcon>
-            <BtnIcon onClick={() => setShowEditar(true)} title="Editar camera"
+            {podeEditar && <BtnIcon onClick={() => setShowEditar(true)} title="Editar camera"
               className="bg-gray-700 hover:bg-yellow-700 text-yellow-300">
-              [E]
-            </BtnIcon>
+              [E]</BtnIcon>}
             <BtnIcon onClick={() => setShowAnaliticos(true)} title="Analiticos IA"
               className="bg-gray-700 hover:bg-gray-600 text-purple-300">
               IA
@@ -679,6 +679,7 @@ export default function CamerasPage() {
                 cameraAoVivoId={cameraAoVivoId}
                 setCameraAoVivoId={setCameraAoVivoId}
                 onCameraAtualizada={onCameraAtualizada}
+                podeEditar={true}
               />
             ))}
             </div>
