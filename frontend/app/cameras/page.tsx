@@ -651,6 +651,9 @@ export default function CamerasPage() {
             <p className="text-gray-400 text-sm mt-1">{cameras.length} cameras cadastradas</p>
           </div>
           <div className="flex gap-3">
+            <Link href="/relatorio" className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-bold text-sm transition">
+              Relatório
+            </Link>
             <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-sm transition">
               Eventos
             </Link>
