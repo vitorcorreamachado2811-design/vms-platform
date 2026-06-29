@@ -119,15 +119,15 @@ def registrar(dados: UsuarioCreate, db: Session = Depends(get_db)):
     existente = db.query(Usuario).filter(Usuario.email == dados.email).first()
     if existente:
         raise HTTPException(status_code=400, detail="Email ja cadastrado")
+    # Primeiro usuario da empresa vira admin automaticamente
+    usuarios_empresa = db.query(Usuario).filter(Usuario.empresa_id == dados.empresa_id).count()
+    perfil_final = 'admin' if usuarios_empresa == 0 else (dados.perfil or 'familiar')
     usuario = Usuario(
         id=uuid.uuid4(),
         nome=dados.nome,
         email=dados.email,
         senha_hash=hash_senha(dados.senha),
         empresa_id=dados.empresa_id,
-        # Primeiro usuario da empresa vira admin automaticamente
-        usuarios_empresa = db.query(Usuario).filter(Usuario.empresa_id == dados.empresa_id).count()
-        perfil_final = 'admin' if usuarios_empresa == 0 else (dados.perfil or 'familiar')
         perfil=perfil_final,
     )
     db.add(usuario)
