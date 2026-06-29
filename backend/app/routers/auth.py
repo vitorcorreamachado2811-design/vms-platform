@@ -125,7 +125,10 @@ def registrar(dados: UsuarioCreate, db: Session = Depends(get_db)):
         email=dados.email,
         senha_hash=hash_senha(dados.senha),
         empresa_id=dados.empresa_id,
-        perfil=dados.perfil or 'familiar',
+        # Primeiro usuario da empresa vira admin automaticamente
+        usuarios_empresa = db.query(Usuario).filter(Usuario.empresa_id == dados.empresa_id).count()
+        perfil_final = 'admin' if usuarios_empresa == 0 else (dados.perfil or 'familiar')
+        perfil=perfil_final,
     )
     db.add(usuario)
     db.commit()
