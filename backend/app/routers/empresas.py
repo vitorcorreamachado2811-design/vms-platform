@@ -12,7 +12,6 @@ from app.models.models import Empresa
 
 RAILWAY_API_TOKEN = os.environ.get("RAILWAY_API_TOKEN", "")
 RAILWAY_PROJECT_ID = os.environ.get("RAILWAY_PROJECT_ID", "")
-RAILWAY_WORKER_SERVICE_ID = os.environ.get("RAILWAY_WORKER_SERVICE_ID", "")
 RAILWAY_ENVIRONMENT_ID = os.environ.get("RAILWAY_ENVIRONMENT_ID", "")
 
 async def criar_worker_railway(empresa_id: str, empresa_nome: str):
@@ -20,11 +19,7 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
         print("[RAILWAY] Token ou Project ID nao configurado", flush=True)
         return None
     nome_worker = "worker-" + empresa_nome.lower().replace(" ", "-")
-    query_create = (
-        'mutation { serviceCreate(input: { projectId: "' + RAILWAY_PROJECT_ID + '" '
-        'name: "' + nome_worker + '" '
-        'templateServiceId: "' + RAILWAY_WORKER_SERVICE_ID + '" }) { id name } }'
-    )
+    query_create = 'mutation { serviceCreate(input: { projectId: "' + RAILWAY_PROJECT_ID + '" name: "' + nome_worker + '" }) { id name } }'
     try:
         async with httpx.AsyncClient() as client:
             res = await client.post(
@@ -39,12 +34,7 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
                 return None
             service_id = data["data"]["serviceCreate"]["id"]
             print("[RAILWAY] Worker criado: " + service_id, flush=True)
-            query_var = (
-                'mutation { variableUpsert(input: { projectId: "' + RAILWAY_PROJECT_ID + '" '
-                'serviceId: "' + service_id + '" '
-                'environmentId: "' + RAILWAY_ENVIRONMENT_ID + '" '
-                'name: "EMPRESA_ID" value: "' + empresa_id + '" }) }'
-            )
+            query_var = 'mutation { variableUpsert(input: { projectId: "' + RAILWAY_PROJECT_ID + '" serviceId: "' + service_id + '" environmentId: "' + RAILWAY_ENVIRONMENT_ID + '" name: "EMPRESA_ID" value: "' + empresa_id + '" }) }'
             await client.post(
                 "https://backboard.railway.com/graphql/v2",
                 json={"query": query_var},
