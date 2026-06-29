@@ -23,7 +23,7 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
     query_create = (
         'mutation { serviceCreate(input: { projectId: "' + RAILWAY_PROJECT_ID + '" '
         'name: "' + nome_worker + '" '
-        'sourceServiceId: "' + RAILWAY_WORKER_SERVICE_ID + '" }) { id name } }'
+        'templateServiceId: "' + RAILWAY_WORKER_SERVICE_ID + '" }) { id name } }'
     )
     try:
         async with httpx.AsyncClient() as client:
