@@ -877,6 +877,13 @@ def main():
             time.sleep(60)
             vivas = sum(1 for t in threads if t.is_alive())
             print(f"Status: {vivas}/{len(threads)} cameras ativas", flush=True)
+            # Watchdog — reinicia HLS de cameras que perderam conexao
+            for camera in cameras:
+                cid = camera['id']
+                proc = _hls_processos.get(cid)
+                if proc is None or proc.poll() is not None:
+                    print(f"[WATCHDOG] Reiniciando HLS {camera['nome']}", flush=True)
+                    threading.Thread(target=iniciar_hls, args=(cid, camera['rtsp_url']), daemon=True).start()
     except KeyboardInterrupt:
         print("Worker encerrado.")
 
