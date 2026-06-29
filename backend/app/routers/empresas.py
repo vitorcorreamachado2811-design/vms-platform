@@ -51,17 +51,13 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
             print("[RAILWAY] Worker criado: " + service_id, flush=True)
 
             # Adiciona todas as variaveis necessarias
-            for nome_var, valor_var in VARIAVEIS_WORKER:
-                val = valor_var.replace("{empresa_id}", empresa_id)
-                query_var = (
-                    'mutation { variableUpsert(input: { '
-                    'projectId: "' + RAILWAY_PROJECT_ID + '" '
-                    'serviceId: "' + service_id + '" '
-                    'environmentId: "' + RAILWAY_ENVIRONMENT_ID + '" '
-                    'name: "' + nome_var + '" '
-                    'value: "' + val + '" '
-                    '}) }'
-                )
+            for nome_var, valor_var in VVARIAVEIS_WORKER = [
+    ("EMPRESA_ID", "{empresa_id}"),
+    ("API_BASE", os.environ.get("API_BASE", "https://vms-platform-production.up.railway.app")),
+    ("SUPABASE_URL", os.environ.get("SUPABASE_URL", "")),
+    ("SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_KEY", "")),
+    ("MEDIAMTX_RTSP_URL", os.environ.get("MEDIAMTX_RTSP_URL", "")),
+]
                 await client.post(
                     "https://backboard.railway.com/graphql/v2",
                     json={"query": query_var},
