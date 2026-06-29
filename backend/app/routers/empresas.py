@@ -15,14 +15,6 @@ RAILWAY_PROJECT_ID = os.environ.get("RAILWAY_PROJECT_ID", "")
 RAILWAY_ENVIRONMENT_ID = os.environ.get("RAILWAY_ENVIRONMENT_ID", "")
 GITHUB_REPO = "vitorcorreamachado2811-design/vms-platform"
 
-VARIAVEIS_WORKER = [
-    ("EMPRESA_ID", "{empresa_id}"),
-    ("API_BASE", os.environ.get("API_BASE", "https://vms-platform-production.up.railway.app")),
-    ("SUPABASE_URL", os.environ.get("SUPABASE_URL", "")),
-    ("SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_KEY", "")),
-    ("MEDIAMTX_RTSP_URL", os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")),
-]
-
 async def criar_worker_railway(empresa_id: str, empresa_nome: str):
     if not RAILWAY_API_TOKEN or not RAILWAY_PROJECT_ID:
         print("[RAILWAY] Token ou Project ID nao configurado", flush=True)
@@ -50,14 +42,24 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
             service_id = data["data"]["serviceCreate"]["id"]
             print("[RAILWAY] Worker criado: " + service_id, flush=True)
 
-            # Adiciona todas as variaveis necessarias
-            for nome_var, valor_var in VVARIAVEIS_WORKER = [
-    ("EMPRESA_ID", "{empresa_id}"),
-    ("API_BASE", os.environ.get("API_BASE", "https://vms-platform-production.up.railway.app")),
-    ("SUPABASE_URL", os.environ.get("SUPABASE_URL", "")),
-    ("SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_KEY", "")),
-    ("MEDIAMTX_RTSP_URL", os.environ.get("MEDIAMTX_RTSP_URL", "")),
-]
+            variaveis = [
+                ("EMPRESA_ID", empresa_id),
+                ("API_BASE", os.environ.get("API_BASE", "https://vms-platform-production.up.railway.app")),
+                ("SUPABASE_URL", os.environ.get("SUPABASE_URL", "")),
+                ("SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_KEY", "")),
+                ("MEDIAMTX_RTSP_URL", os.environ.get("MEDIAMTX_RTSP_URL", "")),
+            ]
+
+            for nome_var, valor_var in variaveis:
+                query_var = (
+                    'mutation { variableUpsert(input: { '
+                    'projectId: "' + RAILWAY_PROJECT_ID + '" '
+                    'serviceId: "' + service_id + '" '
+                    'environmentId: "' + RAILWAY_ENVIRONMENT_ID + '" '
+                    'name: "' + nome_var + '" '
+                    'value: "' + valor_var + '" '
+                    '}) }'
+                )
                 await client.post(
                     "https://backboard.railway.com/graphql/v2",
                     json={"query": query_var},
@@ -65,7 +67,6 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
                 )
                 print("[RAILWAY] Variavel " + nome_var + " configurada", flush=True)
 
-            # Configura o root directory para o worker
             query_instance = (
                 'mutation { serviceInstanceUpdate(serviceId: "' + service_id + '" input: { '
                 'rootDirectory: "/" '
