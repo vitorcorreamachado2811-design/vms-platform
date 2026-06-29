@@ -122,7 +122,7 @@ class CameraResponse(BaseModel):
     rtsp_url: str
     http_url: Optional[str] = None
     ativo: bool
-    empresa_id: UUID
+    empresa_id: Optional[UUID] = None
     class Config:
         from_attributes = True
 
