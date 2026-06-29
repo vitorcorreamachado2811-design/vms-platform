@@ -224,7 +224,7 @@ export default function Dashboard() {
     try {
       const [c, e] = await Promise.all([
         fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
-        fetch(`${API}/empresas/`).then(r => r.json()),
+        fetch(${API}/empresas/).then(r => r.json()).then((data: any[]) => usuario?.perfil === 'superadmin' ? data : data.filter((e: any) => e.id === usuario?.empresa_id)),
       ])
       const cams = Array.isArray(c) ? c : []
       setCameras(cams)
