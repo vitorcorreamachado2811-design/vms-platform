@@ -36,14 +36,14 @@ const PERMISSOES_POR_PERFIL: Record<Perfil, Permissoes> = {
   admin: {
     verCameras: true, verEventos: true, verHabitos: true,
     verHeatmap: true, verContagem: true, cadastrarCamera: true,
+    editarCamera: true, deletarCamera: true, configurarAnaliticos: true,
     cadastrarEmpresa: false, gerenciarUsuarios: true,
-    cadastrarEmpresa: true, gerenciarUsuarios: true,
   },
   gestor: {
     verCameras: true, verEventos: true, verHabitos: true,
-    verHeatmap: true, verContagem: true, cadastrarCamera: false,
-    editarCamera: false, deletarCamera: false, configurarAnaliticos: false,
-    cadastrarEmpresa: false, gerenciarUsuarios: false,
+    verHeatmap: true, verContagem: true, cadastrarCamera: true,
+    editarCamera: true, deletarCamera: true, configurarAnaliticos: true,
+    cadastrarEmpresa: false, gerenciarUsuarios: true,
   },
   cuidador: {
     verCameras: true, verEventos: true, verHabitos: true,
