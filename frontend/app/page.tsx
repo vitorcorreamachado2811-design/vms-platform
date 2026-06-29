@@ -228,10 +228,10 @@ export default function Dashboard() {
       ])
       const cams = Array.isArray(c) ? c : []
       setCameras(cams)
-      setEmpresas(Array.isArray(e) ? e : [])
+      const empresasFiltradas = Array.isArray(e) ? (perfil === 'superadmin' ? e : e.filter((emp: any) => emp.id === usuario?.empresa_id)) : []
+      setEmpresas(empresasFiltradas)
+      if (perfil !== 'superadmin' && empresasFiltradas.length > 0) setEmpresaId(empresasFiltradas[0].id)
       carregarTemposBanheiro(cams)
-    } catch { setCameras([]); setEmpresas([]) }
-  }
 
   async function carregarUsuarios() {
     try {
