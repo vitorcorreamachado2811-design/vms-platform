@@ -428,6 +428,7 @@ export default function Dashboard() {
             <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm"> Ao Vivo</Link>
             {pode.verContagem && <Link href="/contagem" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm"> Contagem</Link>}
             {pode.verHeatmap && <Link href="/heatmap" className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg font-bold transition text-sm"> Heatmap</Link>}
+            <Link href="/admin" className="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded-lg font-bold text-sm transition">Admin</Link>
             <Link href="/eventos" onClick={marcarComoLidas}
               className="relative bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-bold transition text-sm">
                Eventos
