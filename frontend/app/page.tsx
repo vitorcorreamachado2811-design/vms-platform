@@ -232,6 +232,7 @@ export default function Dashboard() {
       setEmpresas(empresasFiltradas)
       if (perfil !== 'superadmin' && empresasFiltradas.length > 0) setEmpresaId(empresasFiltradas[0].id)
       carregarTemposBanheiro(cams)
+    } catch { setCameras([]); setEmpresas([]) }
 
   async function carregarUsuarios() {
     try {
