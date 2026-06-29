@@ -526,8 +526,8 @@ export default function Dashboard() {
                           {pode.deletarCamera && <button onClick={() => setCameraParaDeletar(c)} className="text-gray-400 hover:text-red-400 transition text-lg">Excluir</button>}
                         </div>
                       </div>
-                      {usuario?.perfil === 'admin' && <p className="text-gray-400 text-sm mt-1 truncate">{c.rtsp_url}</p>}
-                      {usuario?.perfil === 'admin' && <p className="text-gray-500 text-xs mt-1 font-mono">{c.id}</p>}
+                      {usuario?.perfil === 'superadmin' || usuario?.perfil === 'admin' && <p className="text-gray-400 text-sm mt-1 truncate">{c.rtsp_url}</p>}
+                      {usuario?.perfil === 'superadmin' || usuario?.perfil === 'admin' && <p className="text-gray-500 text-xs mt-1 font-mono">{c.id}</p>}
                       {pode.editarCamera && (
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-gray-400 text-xs"> Alerta banheiro:</span>

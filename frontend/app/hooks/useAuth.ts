@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export type Perfil = 'admin' | 'gestor' | 'cuidador' | 'familiar'
+export type Perfil = 'superadmin' | 'admin' | 'gestor' | 'cuidador' | 'familiar'
 
 export interface Usuario {
   id: string
@@ -27,6 +27,12 @@ export interface Permissoes {
 }
 
 const PERMISSOES_POR_PERFIL: Record<Perfil, Permissoes> = {
+  superadmin: {
+    verCameras: true, verEventos: true, verHabitos: true,
+    verHeatmap: true, verContagem: true, cadastrarCamera: true,
+    editarCamera: true, deletarCamera: true, configurarAnaliticos: true,
+    cadastrarEmpresa: true, gerenciarUsuarios: true,
+  },
   admin: {
     verCameras: true, verEventos: true, verHabitos: true,
     verHeatmap: true, verContagem: true, cadastrarCamera: true,

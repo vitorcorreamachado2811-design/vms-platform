@@ -33,7 +33,7 @@ export default function AdminPage() {
   const [aba, setAba] = useState<'convites' | 'empresas'>('convites')
 
   useEffect(() => {
-    if (!carregando && usuario?.perfil !== 'admin') router.push('/')
+    if (!carregando && usuario?.perfil !== 'superadmin') router.push('/')
   }, [usuario, carregando])
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export default function AdminPage() {
   }
 
   if (carregando) return null
-  if (usuario?.perfil !== 'admin') return null
+  if (usuario?.perfil !== 'superadmin') return null
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-6">
