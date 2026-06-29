@@ -224,15 +224,14 @@ export default function Dashboard() {
     try {
       const [c, e] = await Promise.all([
         fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
-        fetch(`/empresas/`).then(r => r.json()),
+        fetch(`${API}/empresas/`).then(r => r.json()),
       ])
       const cams = Array.isArray(c) ? c : []
       setCameras(cams)
-      const empresasFiltradas = Array.isArray(e) ? (perfil === 'superadmin' ? e : e.filter((emp: any) => emp.id === usuario?.empresa_id)) : []
-      setEmpresas(empresasFiltradas)
-      if (perfil !== 'superadmin' && empresasFiltradas.length > 0) setEmpresaId(empresasFiltradas[0].id)
+      setEmpresas(Array.isArray(e) ? e : [])
       carregarTemposBanheiro(cams)
     } catch { setCameras([]); setEmpresas([]) }
+  }
 
   async function carregarUsuarios() {
     try {
