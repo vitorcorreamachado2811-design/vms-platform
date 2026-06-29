@@ -206,7 +206,8 @@ def gravar_e_fazer_upload_clipe(camera_id: str, rtsp_url: str, evento_id: str):
             return None
 
         supabase     = get_supabase()
-        storage_path = f"eventos/{camera_id}/{evento_id}.mp4"
+        dia_slot = ((datetime.now(timezone.utc).day - 1) % 10) + 1  # slot 1-10 ciclico
+        storage_path = f"eventos/{camera_id}/dia_{dia_slot:02d}.mp4"
         with open(tmp_path, "rb") as f:
             video_bytes = f.read()
         supabase.storage.from_("event-clips").upload(
