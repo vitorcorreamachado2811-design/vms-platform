@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 const API = 'https://vms-platform-production.up.railway.app'
 
-export default function Login() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [aba, setAba] = useState<'login' | 'registrar'>('login')
@@ -95,7 +95,7 @@ export default function Login() {
           nome: nomeReg,
           email: emailReg,
           senha: senhaReg,
-          empresa_id: '00000000-0000-0000-0000-000000000000', // sera substituido pelo convite
+          empresa_id: '00000000-0000-0000-0000-000000000000',
           convite: convite,
         })
       })
@@ -162,8 +162,6 @@ export default function Login() {
 
           {aba === 'registrar' && (
             <div className="space-y-4">
-
-              {/* Codigo de convite */}
               <div>
                 <label className="text-gray-400 text-sm mb-1 block">Código de convite</label>
                 <div className="flex gap-2">
@@ -191,7 +189,6 @@ export default function Login() {
                   </div>
                 )}
               </div>
-
               <div>
                 <label className="text-gray-400 text-sm mb-1 block">Nome</label>
                 <input className="w-full bg-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -207,12 +204,10 @@ export default function Login() {
                 <input className="w-full bg-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="••••••••" type="password" value={senhaReg} onChange={e => setSenhaReg(e.target.value)} />
               </div>
-
               <button onClick={fazerRegistro} disabled={carregando || !conviteValido}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white py-3 rounded-lg font-bold transition">
                 {carregando ? 'Criando conta...' : 'Criar conta'}
               </button>
-
               {!conviteValido && (
                 <p className="text-center text-gray-500 text-xs">
                   Você precisa de um código de convite para criar uma conta.
@@ -223,5 +218,17 @@ export default function Login() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function Login() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </main>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
