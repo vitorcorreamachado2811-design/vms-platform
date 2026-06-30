@@ -858,8 +858,8 @@ def main():
     while True:
         try:
             resp    = requests.get(f"{API_BASE}/cameras/", timeout=10)
-            cameras = [c for c in resp.json() if c.get('ativo') and c.get('empresa_id') and (not EMPRESA_ID or c.get('empresa_id') == EMPRESA_ID)]
-            print(f"{len(cameras)} cameras ativas", flush=True)
+            empresa_id_env = os.environ.get('EMPRESA_ID', '')
+            cameras = [c for c in resp.json() if c.get('ativo') and c.get('empresa_id') and (not empresa_id_env or c.get('empresa_id') == empresa_id_env)]
             break
         except Exception as e:
             print(f"Erro: {e}. Tentando em 5s...", flush=True)
