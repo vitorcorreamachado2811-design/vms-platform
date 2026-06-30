@@ -11,6 +11,7 @@ class Empresa(Base):
     nome = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     ativo = Column(Boolean, default=True)
+    railway_service_id = Column(String, nullable=True)
     cameras = relationship("Camera", back_populates="empresa")
     usuarios = relationship("Usuario", back_populates="empresa")
 

@@ -13,7 +13,9 @@ import time
 import asyncio
 import io
 from app.database import get_db
-from app.models.models import Camera
+from app.models.models import Camera, Empresa
+from app.railway_utils import reiniciar_worker_railway
+import asyncio
 
 router = APIRouter()
 
@@ -273,7 +275,7 @@ def listar_cameras(empresa_id: Optional[str] = None, db: Session = Depends(get_d
 
 
 @router.post("/", response_model=CameraResponse)
-def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
+async def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     nova = Camera(
         id=uuid.uuid4(),
         nome=camera.nome,
@@ -284,6 +286,16 @@ def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     db.add(nova)
     db.commit()
     db.refresh(nova)
+
+    # Reinicia o worker da empresa para ele ler a nova camera
+    # (o worker so carrega a lista de cameras uma vez, na inicializacao)
+    empresa = db.query(Empresa).filter(Empresa.id == camera.empresa_id).first()
+    if empresa and empresa.railway_service_id:
+        asyncio.create_task(reiniciar_worker_railway(empresa.railway_service_id))
+        print(f"[CAMERA] Restart do worker disparado para empresa {empresa.id}", flush=True)
+    elif empresa and not empresa.railway_service_id:
+        print(f"[CAMERA] Empresa {empresa.id} sem railway_service_id salvo - restart automatico nao disponivel", flush=True)
+
     return nova
 
 
