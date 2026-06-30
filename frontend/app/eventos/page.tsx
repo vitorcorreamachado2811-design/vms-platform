@@ -114,6 +114,17 @@ export default function EventosPage() {
     return cam ? cam.nome : camera_id.slice(0, 8) + '...'
   }
 
+  function ehAlerta(tipo: string) {
+    return tipo === 'queda' || tipo === 'queda_leito' || tipo === 'queda_pe'
+      || tipo === 'comportamento_suspeito_caixa'
+  }
+
+  function labelEvento(tipo: string) {
+    if (tipo === 'comportamento_suspeito_caixa') return '🚨 COMPORTAMENTO SUSPEITO'
+    if (ehAlerta(tipo)) return '⚠️ ' + tipo.toUpperCase().replace('_', ' ')
+    return tipo
+  }
+
   const horaComMaisDeteccoes = dadosGrafico().reduce(
     (max, item) => item.deteccoes > max.deteccoes ? item : max,
     { hora: '-', deteccoes: 0 }
@@ -262,7 +273,7 @@ export default function EventosPage() {
                 <div
                   key={evento.id}
                   className={`rounded-xl border transition ${
-                    evento.tipo === 'queda' || evento.tipo === 'queda_leito' || evento.tipo === 'queda_pe'
+                    ehAlerta(evento.tipo)
                       ? 'bg-red-900/20 border-red-500/30 hover:bg-red-900/30'
                       : 'bg-gray-700/40 border-gray-700 hover:bg-gray-700/60'
                   }`}
@@ -272,13 +283,11 @@ export default function EventosPage() {
                     {/* Tipo */}
                     <div className="w-36">
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        evento.tipo === 'queda' || evento.tipo === 'queda_leito' || evento.tipo === 'queda_pe'
+                        ehAlerta(evento.tipo)
                           ? 'bg-red-900 text-red-300 animate-pulse'
                           : 'bg-blue-900 text-blue-300'
                       }`}>
-                        {evento.tipo === 'queda' || evento.tipo === 'queda_leito' || evento.tipo === 'queda_pe'
-                          ? '⚠️ ' + evento.tipo.toUpperCase().replace('_', ' ')
-                          : evento.tipo}
+                        {labelEvento(evento.tipo)}
                       </span>
                     </div>
 

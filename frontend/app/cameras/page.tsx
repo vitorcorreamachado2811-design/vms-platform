@@ -1,348 +1,699 @@
 'use client'
-
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { HLSPlayer } from '../../components/HLSPlayer'
+import { DashboardAoVivo } from '../../components/DashboardAoVivo'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const API = 'https://vms-platform-production.up.railway.app'
-
-interface Evento {
-  id: string
-  camera_id: string
-  tipo: string
-  confianca: number
-  criado_em: string
-  video_url?: string // ← NOVO
-}
+const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
+const SUPABASE_KEY = 'sb_publishable_0UZ6n5qJEkfAbiKveWTE0A_ixc_w9MY'
 
 interface Camera {
   id: string
   nome: string
+  rtsp_url: string
+  http_url?: string
+  ativo: boolean
+  empresa_id: string
 }
 
-export default function EventosPage() {
-  const { usuario, carregando: authCarregando, logout } = useAuth()
-  const [eventos, setEventos] = useState<Evento[]>([])
-  const [cameras, setCameras] = useState<Camera[]>([])
-  const [loading, setLoading] = useState(true)
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const [cameraSelecionada, setCameraSelecionada] = useState<string>('todas')
-  const [videoAberto, setVideoAberto] = useState<string | null>(null) // ← NOVO
+interface Analiticos {
+  queda_leito: boolean
+  queda_pe: boolean
+  pessoa: boolean
+  banheiro_tempo: boolean
+  gesto_socorro: boolean
+  linha_contagem: boolean
+  habitos: boolean
+  freezer: boolean
+  caixa: boolean
+}
 
-  useEffect(() => {
-    if (!authCarregando) carregarDados()
-  }, [authCarregando])
+interface Regiao {
+  id: string
+  camera_id: string
+  tipo: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  tempo_alerta_min: number
+}
 
-  useEffect(() => {
-    if (!autoRefresh) return
-    const interval = setInterval(carregarEventos, 3000)
-    return () => clearInterval(interval)
-  }, [autoRefresh])
+const ANALITICOS_DEFAULT: Analiticos = {
+  queda_leito: false, queda_pe: false, pessoa: false,
+  banheiro_tempo: false, gesto_socorro: false,
+  linha_contagem: false, habitos: false,
+  freezer: false, caixa: false,
+}
 
-  async function carregarDados() {
+const TIPOS_REGIAO = [
+  { key: 'entrada',   label: 'Entrada/Saida', color: '#3b82f6' },
+  { key: 'freezer',   label: 'Freezer',       color: '#06b6d4' },
+  { key: 'caixa',     label: 'Caixa',         color: '#f59e0b' },
+  { key: 'cama',      label: 'Cama',          color: '#8b5cf6' },
+  { key: 'banheiro',  label: 'Banheiro',      color: '#ec4899' },
+  { key: 'cozinha',   label: 'Cozinha',       color: '#10b981' },
+  { key: 'quarto',    label: 'Quarto',        color: '#f97316' },
+]
+
+function mjpegUrl(cameraId: string) {
+  return `${API}/cameras/${cameraId}/mjpeg`
+}
+
+async function carregarAnaliticos(cameraId: string): Promise<Analiticos> {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/camera_analiticos?camera_id=eq.${cameraId}&select=*`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    const data = await res.json()
+    if (data && data[0]) {
+      const { camera_id, updated_at, ...rest } = data[0]
+      return { ...ANALITICOS_DEFAULT, ...rest } as Analiticos
+    }
+  } catch {}
+  return { ...ANALITICOS_DEFAULT }
+}
+
+async function salvarAnaliticos(cameraId: string, analiticos: Analiticos) {
+  await fetch(`${SUPABASE_URL}/rest/v1/camera_analiticos`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({ camera_id: cameraId, ...analiticos }),
+  })
+}
+
+function BtnIcon({ onClick, title, children, className = '' }: {
+  onClick: () => void; title: string; children: React.ReactNode; className?: string
+}) {
+  return (
+    <button onClick={onClick} title={title}
+      className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold transition ${className}`}>
+      {children}
+    </button>
+  )
+}
+
+// ─── MODAL EDITAR CAMERA ────────────────────────────────────────────────────
+function ModalEditar({ camera, onClose, onSalvo }: {
+  camera: Camera
+  onClose: () => void
+  onSalvo: (c: Camera) => void
+}) {
+  const [nome, setNome] = useState(camera.nome)
+  const [rtsp, setRtsp] = useState(camera.rtsp_url)
+  const [httpUrl, setHttpUrl] = useState(camera.http_url || '')
+  const [ativo, setAtivo] = useState(camera.ativo)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function salvar() {
+    setSalvando(true)
+    setErro('')
     try {
-      const [e, c] = await Promise.all([
-        fetch(`${API}/eventos/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
-        fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
-      ])
-      setEventos(Array.isArray(e) ? e : [])
-      setCameras(Array.isArray(c) ? c : [])
-    } catch {
-      setEventos([])
-      setCameras([])
+      const res = await fetch(`${API}/cameras/${camera.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, rtsp_url: rtsp, http_url: httpUrl || null, ativo }),
+      })
+      if (!res.ok) throw new Error('Erro ao salvar')
+      const data = await res.json()
+      onSalvo(data)
+      onClose()
+    } catch (e: any) {
+      setErro(e.message || 'Erro desconhecido')
     } finally {
-      setLoading(false)
+      setSalvando(false)
     }
   }
 
-  async function carregarEventos() {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl p-5 max-w-sm w-full shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold text-lg">Editar Camera</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">Nome</label>
+            <input value={nome} onChange={e => setNome(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:border-blue-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">URL RTSP</label>
+            <input value={rtsp} onChange={e => setRtsp(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:border-blue-500 outline-none font-mono" />
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">URL HTTP (snapshot, opcional)</label>
+            <input value={httpUrl} onChange={e => setHttpUrl(e.target.value)}
+              className="w-full bg-gray-900 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:border-blue-500 outline-none font-mono" />
+          </div>
+          <div className="flex items-center justify-between bg-gray-900 rounded-lg px-3 py-2">
+            <span className="text-gray-300 text-sm">Camera ativa</span>
+            <button onClick={() => setAtivo(v => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${ativo ? 'bg-green-600' : 'bg-gray-600'}`}>
+              <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${ativo ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+
+        {erro && <p className="text-red-400 text-xs mt-2">{erro}</p>}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold py-2 rounded-lg transition">
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={salvando}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold py-2 rounded-lg transition">
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MODAL REGIOES ───────────────────────────────────────────────────────────
+function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  const [regioes, setRegioes] = useState<Regiao[]>([])
+  const [tipoSelecionado, setTipoSelecionado] = useState('cama')
+  const [desenhando, setDesenhando] = useState(false)
+  const [inicio, setInicio] = useState<{ x: number; y: number } | null>(null)
+  const [atual, setAtual] = useState<{ x: number; y: number } | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const [imgCarregada, setImgCarregada] = useState(false)
+
+  const snapshotUrl = `${API}/cameras/${camera.id}/snapshot`
+
+  useEffect(() => {
+    fetch(`${API}/regioes/${camera.id}`)
+      .then(r => r.json())
+      .then(data => setRegioes(Array.isArray(data) ? data : []))
+      .catch(() => {})
+
+    // Usa frame ao vivo em vez de snapshot — mais rapido e confiavel
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    // Tenta frame ao vivo primeiro, fallback para snapshot
+    const liveUrl = `${API}/cameras/${camera.id}/frame`
+    img.src = liveUrl
+    img.onload = () => { imgRef.current = img; setImgCarregada(true) }
+    img.onerror = () => {
+      // Fallback para snapshot
+      const snap = new Image()
+      snap.crossOrigin = 'anonymous'
+      snap.src = `${API}/cameras/${camera.id}/snapshot`
+      snap.onload = () => { imgRef.current = snap; setImgCarregada(true) }
+      snap.onerror = () => setImgCarregada(true)
+    }
+  }, [camera.id])
+
+  useEffect(() => {
+    desenharCanvas()
+  }, [regioes, atual, inicio, imgCarregada])
+
+  function desenharCanvas() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    if (imgRef.current) {
+      ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height)
+    } else {
+      ctx.fillStyle = '#111'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    }
+
+    // Desenha regioes salvas
+    regioes.forEach(r => {
+      const tipo = TIPOS_REGIAO.find(t => t.key === r.tipo)
+      const color = tipo?.color || '#fff'
+      const x = r.x1 * canvas.width
+      const y = r.y1 * canvas.height
+      const w = (r.x2 - r.x1) * canvas.width
+      const h = (r.y2 - r.y1) * canvas.height
+
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.setLineDash([])
+      ctx.strokeRect(x, y, w, h)
+
+      ctx.fillStyle = color + '33'
+      ctx.fillRect(x, y, w, h)
+
+      ctx.fillStyle = color
+      ctx.font = 'bold 12px sans-serif'
+      ctx.fillText(tipo?.label || r.tipo, x + 6, y + 16)
+    })
+
+    // Desenha retangulo sendo desenhado agora
+    if (desenhando && inicio && atual) {
+      const tipo = TIPOS_REGIAO.find(t => t.key === tipoSelecionado)
+      const color = tipo?.color || '#fff'
+      const x = Math.min(inicio.x, atual.x)
+      const y = Math.min(inicio.y, atual.y)
+      const w = Math.abs(atual.x - inicio.x)
+      const h = Math.abs(atual.y - inicio.y)
+
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 3])
+      ctx.strokeRect(x, y, w, h)
+      ctx.fillStyle = color + '22'
+      ctx.fillRect(x, y, w, h)
+    }
+  }
+
+  function getPosCanvas(e: React.MouseEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current!
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    }
+  }
+
+  function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    const pos = getPosCanvas(e)
+    setInicio(pos)
+    setAtual(pos)
+    setDesenhando(true)
+  }
+
+  function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!desenhando) return
+    setAtual(getPosCanvas(e))
+  }
+
+  async function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!desenhando || !inicio) return
+    setDesenhando(false)
+
+    const canvas = canvasRef.current!
+    const pos = getPosCanvas(e)
+    const x1 = Math.min(inicio.x, pos.x) / canvas.width
+    const y1 = Math.min(inicio.y, pos.y) / canvas.height
+    const x2 = Math.max(inicio.x, pos.x) / canvas.width
+    const y2 = Math.max(inicio.y, pos.y) / canvas.height
+
+    if (x2 - x1 < 0.02 || y2 - y1 < 0.02) return  // retangulo muito pequeno
+
+    setSalvando(true)
     try {
-      const data = await fetch(`${API}/eventos/`).then(r => r.json())
-      setEventos(Array.isArray(data) ? data : [])
+      const res = await fetch(`${API}/regioes/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: camera.id, tipo: tipoSelecionado, x1, y1, x2, y2 }),
+      })
+      const nova = await res.json()
+      setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), nova])
+    } catch {}
+    setSalvando(false)
+    setInicio(null)
+    setAtual(null)
+  }
+
+  async function deletarRegiao(tipo: string) {
+    try {
+      await fetch(`${API}/regioes/${camera.id}/${tipo}`, { method: 'DELETE' })
+      setRegioes(prev => prev.filter(r => r.tipo !== tipo))
     } catch {}
   }
 
-  if (authCarregando) {
-    return (
-      <main className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </main>
-    )
-  }
-
-  const eventosFiltrados = cameraSelecionada === 'todas'
-    ? eventos
-    : eventos.filter(e => e.camera_id === cameraSelecionada)
-
-  const totalHoje = eventosFiltrados.filter(e => {
-    const hoje = new Date().toDateString()
-    return new Date(e.criado_em).toDateString() === hoje
-  }).length
-
-  const totalQuedas = eventos.filter(e => e.tipo === 'queda').length
-
-  function dadosGrafico() {
-    const contagem: Record<string, number> = {}
-    for (let h = 0; h < 24; h++) {
-      contagem[String(h).padStart(2, '0') + 'h'] = 0
-    }
-    eventosFiltrados.forEach(e => {
-      const data = new Date(e.criado_em)
-      const hora = new Date(data.getTime() - 3 * 60 * 60 * 1000).getHours()
-      const chave = String(hora).padStart(2, '0') + 'h'
-      contagem[chave] = (contagem[chave] || 0) + 1
-    })
-    return Object.entries(contagem).map(([hora, deteccoes]) => ({ hora, deteccoes }))
-  }
-
-  function formatarData(criado_em: string) {
-    if (!criado_em) return '-'
-    const data = new Date(criado_em)
-    const brt = new Date(data.getTime() - 3 * 60 * 60 * 1000)
-    return brt.toLocaleString('pt-BR')
-  }
-
-  function corConfianca(confianca: number) {
-    if (confianca >= 0.85) return 'text-green-400'
-    if (confianca >= 0.65) return 'text-yellow-400'
-    return 'text-red-400'
-  }
-
-  function nomeDaCamera(camera_id: string) {
-    const cam = cameras.find(c => c.id === camera_id)
-    return cam ? cam.nome : camera_id.slice(0, 8) + '...'
-  }
-
-  function ehAlerta(tipo: string) {
-    return tipo === 'queda' || tipo === 'queda_leito' || tipo === 'queda_pe'
-      || tipo === 'comportamento_suspeito_caixa'
-  }
-
-  function labelEvento(tipo: string) {
-    if (tipo === 'comportamento_suspeito_caixa') return '🚨 COMPORTAMENTO SUSPEITO'
-    if (ehAlerta(tipo)) return '⚠️ ' + tipo.toUpperCase().replace('_', ' ')
-    return tipo
-  }
-
-  const horaComMaisDeteccoes = dadosGrafico().reduce(
-    (max, item) => item.deteccoes > max.deteccoes ? item : max,
-    { hora: '-', deteccoes: 0 }
-  )
-
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col gap-4 p-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-white font-bold text-lg">Regioes Monitoradas</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
+        </div>
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-blue-400">Eventos</h1>
-            <p className="text-gray-400 mt-1">Detecções em tempo real pela IA</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {usuario && (
-              <span className="text-gray-400 text-sm hidden md:block">👤 {usuario.nome}</span>
-            )}
-            <Link href="/cameras" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold transition">
-              📷 Ao Vivo
-            </Link>
-            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-sm font-bold">
-              ← Dashboard
-            </Link>
-            <button
-              onClick={logout}
-              className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded-lg font-bold transition text-red-300"
-            >
-              Sair
+        <p className="text-gray-400 text-xs">Selecione um tipo e desenhe o retangulo na imagem.</p>
+
+        {/* Seletor de tipo */}
+        <div className="flex gap-2 flex-wrap">
+          {TIPOS_REGIAO.map(t => (
+            <button key={t.key} onClick={() => setTipoSelecionado(t.key)}
+              style={{ borderColor: t.color, color: tipoSelecionado === t.key ? '#fff' : t.color,
+                background: tipoSelecionado === t.key ? t.color : 'transparent' }}
+              className="px-3 py-1 rounded-lg text-sm font-bold border-2 transition">
+              {t.label}
             </button>
-          </div>
+          ))}
         </div>
 
-        {/* Alerta de queda */}
-        {totalQuedas > 0 && (
-          <div className="bg-red-900/40 border border-red-500 rounded-xl p-4 mb-6 flex items-center gap-4 animate-pulse">
-            <span className="text-3xl">🚨</span>
-            <div>
-              <p className="font-bold text-red-300 text-lg">
-                {totalQuedas} queda{totalQuedas > 1 ? 's' : ''} detectada{totalQuedas > 1 ? 's' : ''}!
-              </p>
-              <p className="text-red-400 text-sm">Verifique as câmeras imediatamente.</p>
-            </div>
-          </div>
-        )}
-
-        {/* Cards resumo */}
-        <div className="grid grid-cols-5 gap-4 mb-8">
-          <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Total Eventos</p>
-            <p className="text-3xl font-bold text-blue-400">{eventosFiltrados.length}</p>
-          </div>
-          <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Hoje</p>
-            <p className="text-3xl font-bold text-green-400">{totalHoje}</p>
-          </div>
-          <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Hora com mais movimento</p>
-            <p className="text-3xl font-bold text-yellow-400">{horaComMaisDeteccoes.hora}</p>
-          </div>
-          <div className="bg-red-900/30 border border-red-500/30 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Quedas detectadas</p>
-            <p className="text-3xl font-bold text-red-400">{totalQuedas}</p>
-          </div>
-          <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Auto-Refresh</p>
-            <button
-              onClick={() => setAutoRefresh(v => !v)}
-              className={`mt-1 text-sm px-3 py-1 rounded-full font-bold transition ${autoRefresh ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}
-            >
-              {autoRefresh ? '● Ativo (3s)' : '○ Pausado'}
-            </button>
-          </div>
-        </div>
-
-        {/* Gráfico */}
-        <div className="bg-gray-800 rounded-xl p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">Detecções por hora do dia</h2>
-            <select
-              value={cameraSelecionada}
-              onChange={e => setCameraSelecionada(e.target.value)}
-              className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"
-            >
-              <option value="todas">Todas as câmeras</option>
-              {cameras.map(c => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
-            </select>
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={dadosGrafico()} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="hora" tick={{ fill: '#9CA3AF', fontSize: 11 }} interval={1} />
-              <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px' }}
-                labelStyle={{ color: '#F3F4F6' }}
-                itemStyle={{ color: '#60A5FA' }}
-              />
-              <Bar dataKey="deteccoes" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Detecções" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Tabela */}
-        <div className="bg-gray-800 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Lista de Eventos</h2>
-            <div className="flex gap-3 items-center">
-              <select
-                value={cameraSelecionada}
-                onChange={e => setCameraSelecionada(e.target.value)}
-                className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm"
-              >
-                <option value="todas">Todas ({eventos.length})</option>
-                {cameras.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome} ({eventos.filter(e => e.camera_id === c.id).length})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={carregarEventos}
-                className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-bold transition"
-              >
-                🔄 Atualizar
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : eventosFiltrados.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <div className="text-4xl mb-2">📭</div>
-              <p>Nenhum evento detectado ainda.</p>
-              <p className="text-xs mt-1">O worker YOLO detecta pessoas automaticamente 24/7.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {eventosFiltrados.map(evento => (
-                <div
-                  key={evento.id}
-                  className={`rounded-xl border transition ${
-                    ehAlerta(evento.tipo)
-                      ? 'bg-red-900/20 border-red-500/30 hover:bg-red-900/30'
-                      : 'bg-gray-700/40 border-gray-700 hover:bg-gray-700/60'
-                  }`}
-                >
-                  {/* Linha principal */}
-                  <div className="flex items-center gap-4 px-4 py-3">
-                    {/* Tipo */}
-                    <div className="w-36">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        ehAlerta(evento.tipo)
-                          ? 'bg-red-900 text-red-300 animate-pulse'
-                          : 'bg-blue-900 text-blue-300'
-                      }`}>
-                        {labelEvento(evento.tipo)}
-                      </span>
-                    </div>
-
-                    {/* Confiança */}
-                    <div className={`w-16 font-bold text-sm ${corConfianca(evento.confianca)}`}>
-                      {(evento.confianca * 100).toFixed(0)}%
-                    </div>
-
-                    {/* Câmera */}
-                    <div className="flex-1 text-gray-300 text-xs">
-                      📷 {nomeDaCamera(evento.camera_id)}
-                    </div>
-
-                    {/* Data */}
-                    <div className="text-gray-400 text-xs">
-                      {formatarData(evento.criado_em)}
-                    </div>
-
-                    {/* Botão vídeo */}
-                    {evento.video_url ? (
-                      <button
-                        onClick={() => setVideoAberto(videoAberto === evento.id ? null : evento.id)}
-                        className="flex items-center gap-1 bg-purple-700 hover:bg-purple-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition"
-                      >
-                        {videoAberto === evento.id ? '⏹ Fechar' : '▶ Ver clipe'}
-                      </button>
-                    ) : (
-                      <span className="text-gray-600 text-xs px-3 py-1.5">⏳ Sem vídeo</span>
-                    )}
-                  </div>
-
-                  {/* Player de vídeo (expansível) */}
-                  {evento.video_url && videoAberto === evento.id && (
-                    <div className="px-4 pb-4">
-                      <div className="bg-black rounded-lg overflow-hidden">
-                        <video
-                          src={evento.video_url}
-                          controls
-                          autoPlay
-                          className="w-full max-h-72"
-                          preload="metadata"
-                        />
-                      </div>
-                      <p className="text-gray-500 text-xs mt-2 text-center">
-                        Clipe: 10s antes + 10s depois do evento
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
+        {/* Canvas */}
+        <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+          <canvas
+            ref={canvasRef}
+            width={640}
+            height={360}
+            className="w-full h-full cursor-crosshair"
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+          />
+          {salvando && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <span className="text-white text-sm">Salvando...</span>
             </div>
           )}
         </div>
 
+        {/* Lista de regioes salvas */}
+        {regioes.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-gray-400 text-xs mb-1">Regioes salvas:</p>
+            {regioes.map(r => {
+              const tipo = TIPOS_REGIAO.find(t => t.key === r.tipo)
+              return (
+                <div key={r.id} className="flex items-center justify-between bg-gray-900 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span style={{ background: tipo?.color }} className="w-3 h-3 rounded-sm inline-block" />
+                    <span className="text-gray-300 text-sm">{tipo?.label || r.tipo}</span>
+                  </div>
+                  <button onClick={() => deletarRegiao(r.tipo)}
+                    className="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 rounded">
+                    Remover
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── PAINEL ANALITICOS ───────────────────────────────────────────────────────
+function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: () => void }) {
+  const [analiticos, setAnaliticos] = useState<Analiticos>(ANALITICOS_DEFAULT)
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    carregarAnaliticos(cameraId).then(setAnaliticos)
+  }, [cameraId])
+
+  async function toggle(key: keyof Analiticos) {
+    const novo = { ...analiticos, [key]: !analiticos[key] }
+    setAnaliticos(novo)
+    setSalvando(true)
+    await salvarAnaliticos(cameraId, novo)
+    setSalvando(false)
+  }
+
+  const items: { key: keyof Analiticos; label: string }[] = [
+    { key: 'queda_leito', label: 'Queda do Leito' },
+    { key: 'queda_pe', label: 'Queda em Pe' },
+    { key: 'pessoa', label: 'Detectar Pessoa' },
+    { key: 'banheiro_tempo', label: 'Tempo no Banheiro' },
+    { key: 'gesto_socorro', label: 'Gesto de Socorro' },
+    { key: 'linha_contagem', label: 'Linha de Contagem' },
+    { key: 'habitos', label: 'Monitorar Habitos' },
+    { key: 'freezer', label: 'Nivel do Freezer' },
+    { key: 'caixa', label: 'Monitorar Caixa' },
+  ]
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl p-5 max-w-xs w-full shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold text-lg">Analiticos IA</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
+        </div>
+        {salvando && <p className="text-blue-400 text-xs mb-2">Salvando...</p>}
+        <div className="space-y-2">
+          {items.map(({ key, label }) => (
+            <div key={key} className="flex items-center justify-between bg-gray-900 rounded-lg px-3 py-2">
+              <span className="text-gray-300 text-sm">{label}</span>
+              <button onClick={() => toggle(key)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${analiticos[key] ? 'bg-blue-600' : 'bg-gray-600'}`}>
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${analiticos[key] ? 'translate-x-5' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MJPEG PLAYER ───────────────────────────────────────────────────────────
+function MjpegPlayer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [status, setStatus] = useState<'connecting' | 'live' | 'error'>('connecting')
+  const reconnectRef = useRef<NodeJS.Timeout | null>(null)
+
+  const url = mjpegUrl(camera.id)
+
+  function conectar() {
+    if (!imgRef.current) return
+    setStatus('connecting')
+    imgRef.current.src = `${url}?t=${Date.now()}`
+  }
+
+  useEffect(() => {
+    conectar()
+    return () => {
+      if (imgRef.current) imgRef.current.src = ''
+      if (reconnectRef.current) clearTimeout(reconnectRef.current)
+    }
+  }, [camera.id])
+
+  function handleLoad() {
+    setStatus('live')
+    if (reconnectRef.current) clearTimeout(reconnectRef.current)
+  }
+
+  function handleError() {
+    setStatus('error')
+    reconnectRef.current = setTimeout(() => conectar(), 3000)
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)',
+      zIndex: 9999, display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 16px', background: 'rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            background: status === 'live' ? '#22c55e' : status === 'connecting' ? '#f59e0b' : '#ef4444',
+            boxShadow: status === 'live' ? '0 0 0 3px rgba(34,197,94,0.25)' : 'none',
+          }} />
+          <span style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>{camera.nome}</span>
+          {status === 'live' && (
+            <span style={{
+              background: '#dc2626', color: '#fff', fontSize: 10,
+              fontWeight: 700, padding: '2px 7px', borderRadius: 4, letterSpacing: 1,
+            }}>AO VIVO</span>
+          )}
+          {status === 'connecting' && (
+            <span style={{ color: '#9ca3af', fontSize: 12 }}>Conectando...</span>
+          )}
+          {status === 'error' && (
+            <span style={{ color: '#fca5a5', fontSize: 12 }}>Reconectando em 3s...</span>
+          )}
+        </div>
+        <button onClick={onClose}
+          style={{
+            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+            fontSize: 20, width: 36, height: 36, borderRadius: 8,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+          x
+        </button>
+      </div>
+
+      <div style={{ flex: 1, position: 'relative', background: '#000' }}>
+        <img ref={imgRef} onLoad={handleLoad} onError={handleError} alt={camera.nome}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+        {status !== 'live' && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.55)', gap: 14,
+          }}>
+            {status === 'connecting' ? (
+              <>
+                <div style={{
+                  width: 40, height: 40, border: '3px solid rgba(255,255,255,0.15)',
+                  borderTopColor: '#fff', borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                <span style={{ color: '#9ca3af', fontSize: 14 }}>Aguardando stream...</span>
+              </>
+            ) : (
+              <span style={{ color: '#fca5a5', fontSize: 14 }}>Sem sinal - reconectando...</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── CAMERA PLAYER CARD ──────────────────────────────────────────────────────
+function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtualizada, podeEditar }: {
+  camera: Camera
+  cameraAoVivoId: string | null
+  setCameraAoVivoId: (id: string | null) => void
+  onCameraAtualizada: (c: Camera) => void
+  podeEditar?: boolean
+}) {
+  const aoVivo = cameraAoVivoId === camera.id
+  const [showAnaliticos, setShowAnaliticos] = useState(false)
+  const [showRegioes, setShowRegioes] = useState(false)
+  const [showEditar, setShowEditar] = useState(false)
+
+  const snapshotUrl = `${API}/cameras/${camera.id}/snapshot`
+
+  return (
+    <>
+      {showAnaliticos && (
+        <PainelAnaliticos cameraId={camera.id} onClose={() => setShowAnaliticos(false)} />
+      )}
+      {showRegioes && (
+        <ModalRegioes camera={camera} onClose={() => setShowRegioes(false)} />
+      )}
+      {showEditar && (
+        <ModalEditar camera={camera} onClose={() => setShowEditar(false)} onSalvo={onCameraAtualizada} />
+      )}
+      {aoVivo && (
+        <HLSPlayer cameraId={camera.id} cameraName={camera.nome} onClose={() => setCameraAoVivoId(null)} />
+      )}
+
+      <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
+        <div className="relative aspect-video bg-black">
+          <img src={snapshotUrl} alt={camera.nome}
+            className="w-full h-full object-cover opacity-60"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <button onClick={() => setCameraAoVivoId(camera.id)}
+            className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition">
+            <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-white text-2xl ml-1">&#9654;</span>
+            </div>
+          </button>
+        </div>
+
+        <div className="p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-white font-bold">{camera.nome}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${camera.ativo ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+              {camera.ativo ? 'Ativa' : 'Inativa'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCameraAoVivoId(camera.id)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1">
+              <span>&#9654;</span> Ao Vivo
+            </button>
+            <BtnIcon onClick={() => setShowRegioes(true)} title="Regioes monitoradas"
+              className="bg-gray-700 hover:bg-emerald-700 text-emerald-300">
+              [R]
+            </BtnIcon>
+            {podeEditar && <BtnIcon onClick={() => setShowEditar(true)} title="Editar camera"
+              className="bg-gray-700 hover:bg-yellow-700 text-yellow-300">
+              [E]</BtnIcon>}
+            <BtnIcon onClick={() => setShowAnaliticos(true)} title="Analiticos IA"
+              className="bg-gray-700 hover:bg-gray-600 text-purple-300">
+              IA
+            </BtnIcon>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── PAGE ────────────────────────────────────────────────────────────────────
+export default function CamerasPage() {
+  const { usuario } = useAuth()
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [cameraAoVivoId, setCameraAoVivoId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!usuario) return
+    fetch(`${API}/cameras/?empresa_id=${usuario.empresa_id}`)
+      .then(r => r.json())
+      .then(data => { setCameras(Array.isArray(data) ? data : []); setCarregando(false) })
+      .catch(() => setCarregando(false))
+  }, [usuario])
+
+  function onCameraAtualizada(atualizada: Camera) {
+    setCameras(prev => prev.map(c => c.id === atualizada.id ? atualizada : c))
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-950 text-white p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-blue-400">Cameras ao Vivo</h1>
+            <p className="text-gray-400 text-sm mt-1">{cameras.length} cameras cadastradas</p>
+          </div>
+          <div className="flex gap-3">
+            <Link href="/relatorio" className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-bold text-sm transition">
+              Relatório
+            </Link>
+            <Link href="/eventos" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-sm transition">
+              Eventos
+            </Link>
+            <Link href="/" className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold text-sm transition">
+              Dashboard
+            </Link>
+          </div>
+        </div>
+
+        {carregando ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : cameras.length === 0 ? (
+          <div className="text-center py-20 text-gray-400">Nenhuma camera cadastrada.</div>
+        ) : (
+          <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {cameras.map(camera => (
+              <CameraPlayer
+                key={camera.id}
+                camera={camera}
+                cameraAoVivoId={cameraAoVivoId}
+                setCameraAoVivoId={setCameraAoVivoId}
+                onCameraAtualizada={onCameraAtualizada}
+                podeEditar={true}
+              />
+            ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   )
 }
+
+
+
