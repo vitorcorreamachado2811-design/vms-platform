@@ -111,9 +111,18 @@ def iniciar_hls(camera_id: str, rtsp_url: str):
     print(f"[HLS] Publicando {camera_id} -> {destino}", flush=True)
 
     def _monitor_hls(p, cid):
-        err = p.stderr.read(300).decode('utf-8', errors='ignore')
-        if err:
-            print(f"[HLS] Erro {cid}: {err}", flush=True)
+        # Dreno continuamente o stderr para nunca encher o buffer do pipe
+        # (se ninguem ler, o ffmpeg trava esperando espaco e o push HLS morre)
+        ultimo_log = 0
+        for linha in iter(p.stderr.readline, b''):
+            if not linha:
+                break
+            agora = time.time()
+            # Evita spam: só loga no máximo 1x a cada 30s por câmera
+            if agora - ultimo_log > 30:
+                texto = linha.decode('utf-8', errors='ignore').strip()
+                print(f"[HLS] {cid}: {texto}", flush=True)
+                ultimo_log = agora
 
     threading.Thread(target=_monitor_hls, args=(proc, camera_id), daemon=True).start()
 
