@@ -381,8 +381,19 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                 "ffmpeg", "-rtsp_transport", "tcp", "-i", rtsp_url,
                 "-vf", f"fps={FPS_BUFFER}", "-q:v", "8",
                 "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"
-            ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             print(f"[CAPTURA] Conexao RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
+
+            def _drenar_stderr_captura(p, cid):
+                # Dreno continuamente para nunca encher o buffer do pipe
+                for linha in iter(p.stderr.readline, b''):
+                    if not linha:
+                        break
+                    texto = linha.decode('utf-8', errors='ignore').strip()
+                    if texto:
+                        print(f"[CAPTURA-ERR] {cid}: {texto}", flush=True)
+            threading.Thread(target=_drenar_stderr_captura, args=(proc, camera_id), daemon=True).start()
+
             buffer = b""
             while _captura_status.get(camera_id, {}).get("rodando"):
                 chunk = proc.stdout.read(16384)
@@ -512,13 +523,30 @@ def iou(boxA, boxB):
 _ultimo_freezer: dict = {}
 FREEZER_INTERVALO = 300
 
-def analisar_nivel_freezer(frame, camera_id: str, empresa_id: str):
+def analisar_nivel_freezer(frame, camera_id: str, empresa_id: str, regioes=None):
     agora = time.time()
     if agora - _ultimo_freezer.get(camera_id, 0) < FREEZER_INTERVALO:
         return
     _ultimo_freezer[camera_id] = agora
     try:
-        pequeno = cv2.resize(frame, (160, 120))
+        h, w = frame.shape[:2]
+        alvo = frame
+        # Recorta para a regiao do tipo "freezer" desenhada na tela, se existir
+        if regioes:
+            regiao = next((r for r in regioes if r.get("tipo") == "freezer"), None)
+            if regiao:
+                x1 = max(0, min(w - 1, int(regiao["x1"] * w)))
+                x2 = max(0, min(w,     int(regiao["x2"] * w)))
+                y1 = max(0, min(h - 1, int(regiao["y1"] * h)))
+                y2 = max(0, min(h,     int(regiao["y2"] * h)))
+                if x2 > x1 and y2 > y1:
+                    alvo = frame[y1:y2, x1:x2]
+                else:
+                    print(f"[FREEZER] {camera_id} regiao invalida, usando frame inteiro", flush=True)
+            else:
+                print(f"[FREEZER] {camera_id} sem regiao 'freezer' definida, usando frame inteiro", flush=True)
+
+        pequeno = cv2.resize(alvo, (160, 120))
         hsv = cv2.cvtColor(pequeno, cv2.COLOR_BGR2HSV)
         mask_branco = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 40, 255]))
         mask_cinza  = cv2.inRange(hsv, np.array([0, 0, 80]),  np.array([180, 30, 200]))
@@ -624,6 +652,68 @@ def processar_caixa(frame, results, camera_id: str, empresa_id: str):
 
 
 # ---------------------------------------------------------
+# DETECCAO DE COMPORTAMENTO SUSPEITO NO CAIXA
+# ---------------------------------------------------------
+# Heuristica: alerta quando uma mao entra na regiao do "caixa" e, em
+# seguida (dentro de uma janela curta de tempo), se aproxima do proprio
+# quadril da pessoa - possivel gesto de guardar algo no bolso, sem
+# devolver a mao ao caixa. NAO e uma confirmacao de furto: e um alerta
+# de comportamento atipico para revisao humana do clipe gravado.
+JANELA_SUSPEITA_SEG   = 8     # tempo max. entre "mao no caixa" e "mao perto do quadril"
+DIST_BOLSO_MAX        = 0.07  # distancia normalizada (0-1) pulso<->quadril
+COOLDOWN_SUSPEITO_SEG = 60
+
+_estado_mao_caixa: dict = {}
+
+def _dist_norm(p1, p2):
+    return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
+
+def detectar_comportamento_suspeito(tid, kps, caixa_regiao, w, h, agora_dt, agora,
+                                     camera_id, empresa_id, nome, rtsp_url, conf, cooldowns):
+    if kps is None or len(kps) < 17 or caixa_regiao is None:
+        return
+    estado_tid = _estado_mao_caixa.setdefault(tid, {})
+
+    pulsos = []
+    if kps[PULSO_ESQ][2] > 0.3:
+        pulsos.append((kps[PULSO_ESQ][0] / w, kps[PULSO_ESQ][1] / h))
+    if kps[PULSO_DIR][2] > 0.3:
+        pulsos.append((kps[PULSO_DIR][0] / w, kps[PULSO_DIR][1] / h))
+    if not pulsos:
+        return
+
+    mao_no_caixa = any(pessoa_na_regiao(px, py, caixa_regiao) for px, py in pulsos)
+    if mao_no_caixa:
+        estado_tid["mao_caixa_em"] = agora_dt
+        return
+
+    momento_caixa = estado_tid.get("mao_caixa_em")
+    if not momento_caixa:
+        return
+    if (agora_dt - momento_caixa).total_seconds() > JANELA_SUSPEITA_SEG:
+        return
+
+    quadris = []
+    if kps[QUADRIL_ESQ][2] > 0.3:
+        quadris.append((kps[QUADRIL_ESQ][0] / w, kps[QUADRIL_ESQ][1] / h))
+    if kps[QUADRIL_DIR][2] > 0.3:
+        quadris.append((kps[QUADRIL_DIR][0] / w, kps[QUADRIL_DIR][1] / h))
+    if not quadris:
+        return
+
+    perto_do_quadril = any(_dist_norm(p, q) < DIST_BOLSO_MAX for p in pulsos for q in quadris)
+    if not perto_do_quadril:
+        return
+
+    if agora - cooldowns[tid]["comportamento_suspeito"] < COOLDOWN_SUSPEITO_SEG:
+        return
+
+    cooldowns[tid]["comportamento_suspeito"] = agora
+    estado_tid["mao_caixa_em"] = None
+    salvar_evento(camera_id, "comportamento_suspeito_caixa", conf, nome, rtsp_url)
+
+
+# ---------------------------------------------------------
 # LOOP PRINCIPAL POR CAMERA
 # ---------------------------------------------------------
 def processar_camera(camera):
@@ -671,7 +761,7 @@ def processar_camera(camera):
             results = model_pose(frame, verbose=False)
 
             if analiticos.get("freezer", False):
-                analisar_nivel_freezer(frame, camera_id, empresa_id)
+                analisar_nivel_freezer(frame, camera_id, empresa_id, regioes)
 
             if analiticos.get("caixa", False):
                 processar_caixa(frame, results, camera_id, empresa_id)
@@ -692,6 +782,7 @@ def processar_camera(camera):
             banheiro = next((r for r in regioes if r["tipo"] == "banheiro"), None)
             cozinha  = next((r for r in regioes if r["tipo"] == "cozinha"),  None)
             quarto   = next((r for r in regioes if r["tipo"] == "quarto"),   None)
+            caixa_regiao = next((r for r in regioes if r["tipo"] == "caixa"), None)
 
             novos_tracks = {}; usados = set()
 
@@ -718,6 +809,12 @@ def processar_camera(camera):
 
                     def pode_alertar(tipo): return agora - cooldowns[tid][tipo] > COOLDOWN_SEGUNDOS
                     def analitico_ativo(key): return analiticos.get(key, False)
+
+                    if caixa_regiao and analitico_ativo("habitos"):
+                        detectar_comportamento_suspeito(
+                            tid, det["kps"], caixa_regiao, w, h, agora_dt, agora,
+                            camera_id, empresa_id, nome, rtsp_url, det["conf"], cooldowns
+                        )
 
                     if estava_na_cama and not na_cama and horizontal:
                         if analitico_ativo("queda_leito") and pode_alertar("queda_leito"):
