@@ -58,7 +58,7 @@ export default function EventosPage() {
 
   async function carregarEventos() {
     try {
-      const data = await fetch(`${API}/eventos/`).then(r => r.json())
+      const data = await fetch(`${API}/eventos/?empresa_id=${usuario?.empresa_id}`).then(r => r.json())
       setEventos(Array.isArray(data) ? data : [])
     } catch {}
   }

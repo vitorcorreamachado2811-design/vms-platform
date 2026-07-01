@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useAuth } from '../hooks/useAuth'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine
@@ -246,6 +247,7 @@ function GraficoHistorico({ registros, perfil }: {
 // PÁGINA PRINCIPAL
 // ─────────────────────────────────────────────
 export default function HabitosPage() {
+  const { usuario, carregando: authCarregando, logout } = useAuth()
   const [cameras, setCameras] = useState<Camera[]>([])
   const [cameraSelecionada, setCameraSelecionada] = useState<string>('')
   const [perfis, setPerfis] = useState<PerfilHabito[]>([])
@@ -255,9 +257,10 @@ export default function HabitosPage() {
   const [aba, setAba] = useState<'perfil' | 'alertas' | 'historico'>('perfil')
   const [carregando, setCarregando] = useState(true)
 
-  // Carrega câmeras ao montar
+  // Carrega câmeras ao montar (somente depois que sabemos quem esta logado)
   useEffect(() => {
-    fetch(`${API}/cameras/`)
+    if (authCarregando || !usuario) return
+    fetch(`${API}/cameras/?empresa_id=${usuario.empresa_id}`)
       .then(r => r.json())
       .then(data => {
         const ativas = Array.isArray(data) ? data.filter((c: Camera) => c.ativo) : []
@@ -265,7 +268,7 @@ export default function HabitosPage() {
         if (ativas.length > 0) setCameraSelecionada(ativas[0].id)
       })
       .catch(() => setCarregando(false))
-  }, [])
+  }, [authCarregando, usuario])
 
   // Carrega dados quando câmera ou tipo muda
   useEffect(() => {
@@ -278,7 +281,7 @@ export default function HabitosPage() {
     try {
       const [resPerfis, resAlertas, resRegistros] = await Promise.all([
         fetch(`${API}/habitos/perfil/${cameraSelecionada}`).then(r => r.json()),
-        fetch(`${API}/habitos/alertas`).then(r => r.json()),
+        fetch(`${API}/habitos/alertas?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
         fetch(`${API}/habitos/registros/${cameraSelecionada}?tipo=${tipoSelecionado}&dias=14`).then(r => r.json()),
       ])
       setPerfis(Array.isArray(resPerfis) ? resPerfis : [])

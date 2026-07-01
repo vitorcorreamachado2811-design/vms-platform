@@ -50,7 +50,7 @@ export default function HeatmapPage() {
   }, [heatmapData, opacidade])
 
   async function carregarCameras() {
-    const data = await fetch(`${API}/cameras/`).then(r => r.json())
+    const data = await fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json())
     setCameras(Array.isArray(data) ? data : [])
   }
 
