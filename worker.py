@@ -729,10 +729,11 @@ _next_id_copos: dict = {}   # {camera_id: int}
 
 def contar_copos_potes(frame, camera_id: str, nome: str, regiao):
     """
-    Detecta copos/potes (classes COCO 'cup' e 'bowl') dentro da regiao
-    desenhada e conta cada objeto NOVO que aparece nela, usando um
-    tracker simples por IOU para nao contar o mesmo objeto repetidas
-    vezes enquanto ele permanece visivel na area.
+    Detecta copos/potes (classes COCO 'cup' e 'bowl') e conta cada vez que
+    um objeto CRUZA a linha desenhada (regiao com ponto inicial x1,y1 e
+    ponto final x2,y2), usando tracking simples por IOU para saber a
+    direcao do cruzamento -- mesmo principio da Linha de Contagem de
+    pessoas (entrada/saida).
     """
     if regiao is None:
         return
@@ -747,10 +748,7 @@ def contar_copos_potes(frame, camera_id: str, nome: str, regiao):
                 if conf < COPO_CONF_MIN:
                     continue
                 coords = box.xyxy[0].cpu().numpy()
-                cx = (coords[0] + coords[2]) / 2 / w
-                cy = (coords[1] + coords[3]) / 2 / h
-                if pessoa_na_regiao(cx, cy, regiao):
-                    deteccoes.append({"box": coords, "conf": conf})
+                deteccoes.append({"box": coords, "conf": conf})
 
         tracks = _tracks_copos.get(camera_id, {})
         usados = set()
@@ -766,18 +764,33 @@ def contar_copos_potes(frame, camera_id: str, nome: str, regiao):
                 if score > melhor_iou:
                     melhor_iou = score
                     melhor_idx = idx
-            if melhor_idx >= 0:
-                usados.add(melhor_idx)
-                novos_tracks[tid] = {"box": deteccoes[melhor_idx]["box"]}
+
+            if melhor_idx < 0:
+                continue  # objeto sumiu de vista, descarta o track
+
+            usados.add(melhor_idx)
+            det = deteccoes[melhor_idx]
+            cx = (det["box"][0] + det["box"][2]) / 2 / w
+            cy = (det["box"][1] + det["box"][3]) / 2 / h
+            lado_atual = lado_da_linha(cx, cy, regiao["x1"], regiao["y1"], regiao["x2"], regiao["y2"])
+            lado_ant = tr.get("lado")
+
+            if lado_ant is not None and lado_ant != 0 and lado_atual != 0:
+                if (lado_ant > 0) != (lado_atual > 0):
+                    print(f"[COPOS] {nome} objeto cruzou a linha (conf={det['conf']:.0%})", flush=True)
+                    # rtsp_url="" -> nao grava clipe, evento leve (evita sobrecarga com contagem frequente)
+                    salvar_evento(camera_id, "copo_pote_contado", det["conf"], nome, "")
+
+            novos_tracks[tid] = {"box": det["box"], "lado": lado_atual}
 
         next_id = _next_id_copos.get(camera_id, 0)
         for idx, det in enumerate(deteccoes):
             if idx in usados:
                 continue
-            novos_tracks[next_id] = {"box": det["box"]}
-            print(f"[COPOS] {nome} novo copo/pote (conf={det['conf']:.0%})", flush=True)
-            # rtsp_url="" -> nao grava clipe, evento leve (evita sobrecarga com contagem frequente)
-            salvar_evento(camera_id, "copo_pote_contado", det["conf"], nome, "")
+            cx = (det["box"][0] + det["box"][2]) / 2 / w
+            cy = (det["box"][1] + det["box"][3]) / 2 / h
+            lado_ini = lado_da_linha(cx, cy, regiao["x1"], regiao["y1"], regiao["x2"], regiao["y2"])
+            novos_tracks[next_id] = {"box": det["box"], "lado": lado_ini}
             next_id += 1
 
         _tracks_copos[camera_id] = novos_tracks

@@ -64,6 +64,13 @@ function mjpegUrl(cameraId: string) {
   return `${API}/cameras/${cameraId}/mjpeg`
 }
 
+// Tipos de regiao desenhados como LINHA (cruzamento lado A -> lado B),
+// em vez de retangulo (area/presenca).
+const TIPOS_LINHA = ['copos']
+function ehLinha(tipo: string) {
+  return TIPOS_LINHA.includes(tipo)
+}
+
 async function carregarAnaliticos(cameraId: string): Promise<Analiticos> {
   try {
     const res = await fetch(
@@ -79,17 +86,28 @@ async function carregarAnaliticos(cameraId: string): Promise<Analiticos> {
   return { ...ANALITICOS_DEFAULT }
 }
 
-async function salvarAnaliticos(cameraId: string, analiticos: Analiticos) {
-  await fetch(`${SUPABASE_URL}/rest/v1/camera_analiticos`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify({ camera_id: cameraId, ...analiticos }),
-  })
+async function salvarAnaliticos(cameraId: string, analiticos: Analiticos): Promise<boolean> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/camera_analiticos`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ camera_id: cameraId, ...analiticos }),
+    })
+    if (!res.ok) {
+      const texto = await res.text().catch(() => '')
+      console.error('Erro ao salvar analiticos:', res.status, texto)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('Erro ao salvar analiticos:', e)
+    return false
+  }
 }
 
 function BtnIcon({ onClick, title, children, className = '' }: {
@@ -246,6 +264,38 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
     regioes.forEach(r => {
       const tipo = TIPOS_REGIAO.find(t => t.key === r.tipo)
       const color = tipo?.color || '#fff'
+
+      if (ehLinha(r.tipo)) {
+        const xa = r.x1 * canvas.width, ya = r.y1 * canvas.height
+        const xb = r.x2 * canvas.width, yb = r.y2 * canvas.height
+        ctx.strokeStyle = color
+        ctx.lineWidth = 3
+        ctx.setLineDash([])
+        ctx.beginPath()
+        ctx.moveTo(xa, ya)
+        ctx.lineTo(xb, yb)
+        ctx.stroke()
+
+        const pontos: { label: string; px: number; py: number }[] = [
+          { label: 'A', px: xa, py: ya },
+          { label: 'B', px: xb, py: yb },
+        ]
+        pontos.forEach(p => {
+          ctx.beginPath()
+          ctx.arc(p.px, p.py, 6, 0, Math.PI * 2)
+          ctx.fillStyle = color
+          ctx.fill()
+          ctx.fillStyle = '#fff'
+          ctx.font = 'bold 11px sans-serif'
+          ctx.fillText(p.label, p.px - 3, p.py - 10)
+        })
+
+        ctx.fillStyle = color
+        ctx.font = 'bold 12px sans-serif'
+        ctx.fillText(tipo?.label || r.tipo, Math.min(xa, xb) + 4, Math.min(ya, yb) - 6)
+        return
+      }
+
       const x = r.x1 * canvas.width
       const y = r.y1 * canvas.height
       const w = (r.x2 - r.x1) * canvas.width
@@ -264,10 +314,22 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
       ctx.fillText(tipo?.label || r.tipo, x + 6, y + 16)
     })
 
-    // Desenha retangulo sendo desenhado agora
+    // Desenha o retangulo OU a linha sendo desenhado(a) agora
     if (desenhando && inicio && atual) {
       const tipo = TIPOS_REGIAO.find(t => t.key === tipoSelecionado)
       const color = tipo?.color || '#fff'
+
+      if (ehLinha(tipoSelecionado)) {
+        ctx.strokeStyle = color
+        ctx.lineWidth = 3
+        ctx.setLineDash([6, 3])
+        ctx.beginPath()
+        ctx.moveTo(inicio.x, inicio.y)
+        ctx.lineTo(atual.x, atual.y)
+        ctx.stroke()
+        return
+      }
+
       const x = Math.min(inicio.x, atual.x)
       const y = Math.min(inicio.y, atual.y)
       const w = Math.abs(atual.x - inicio.x)
@@ -309,12 +371,25 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
 
     const canvas = canvasRef.current!
     const pos = getPosCanvas(e)
-    const x1 = Math.min(inicio.x, pos.x) / canvas.width
-    const y1 = Math.min(inicio.y, pos.y) / canvas.height
-    const x2 = Math.max(inicio.x, pos.x) / canvas.width
-    const y2 = Math.max(inicio.y, pos.y) / canvas.height
 
-    if (x2 - x1 < 0.02 || y2 - y1 < 0.02) return  // retangulo muito pequeno
+    let x1: number, y1: number, x2: number, y2: number
+
+    if (ehLinha(tipoSelecionado)) {
+      // Linha: preserva a direcao exata do arrasto (ponto A -> ponto B),
+      // pois o lado do cruzamento importa para a contagem.
+      x1 = inicio.x / canvas.width
+      y1 = inicio.y / canvas.height
+      x2 = pos.x / canvas.width
+      y2 = pos.y / canvas.height
+      const comprimento = Math.hypot(x2 - x1, y2 - y1)
+      if (comprimento < 0.04) return  // linha muito curta
+    } else {
+      x1 = Math.min(inicio.x, pos.x) / canvas.width
+      y1 = Math.min(inicio.y, pos.y) / canvas.height
+      x2 = Math.max(inicio.x, pos.x) / canvas.width
+      y2 = Math.max(inicio.y, pos.y) / canvas.height
+      if (x2 - x1 < 0.02 || y2 - y1 < 0.02) return  // retangulo muito pequeno
+    }
 
     setSalvando(true)
     try {
@@ -346,7 +421,11 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
         </div>
 
-        <p className="text-gray-400 text-xs">Selecione um tipo e desenhe o retangulo na imagem.</p>
+        <p className="text-gray-400 text-xs">
+          {ehLinha(tipoSelecionado)
+            ? 'Selecione o tipo e desenhe uma LINHA na imagem (clique no ponto A e arraste ate o ponto B).'
+            : 'Selecione um tipo e desenhe o retangulo na imagem.'}
+        </p>
 
         {/* Seletor de tipo */}
         <div className="flex gap-2 flex-wrap">
@@ -413,11 +492,19 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
     carregarAnaliticos(cameraId).then(setAnaliticos)
   }, [cameraId])
 
+  const [erro, setErro] = useState<string | null>(null)
+
   async function toggle(key: keyof Analiticos) {
+    const anterior = analiticos
     const novo = { ...analiticos, [key]: !analiticos[key] }
     setAnaliticos(novo)
     setSalvando(true)
-    await salvarAnaliticos(cameraId, novo)
+    setErro(null)
+    const ok = await salvarAnaliticos(cameraId, novo)
+    if (!ok) {
+      setAnaliticos(anterior)
+      setErro('Nao foi possivel salvar. Veja o console (F12) para detalhes.')
+    }
     setSalvando(false)
   }
 
@@ -442,6 +529,7 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">x</button>
         </div>
         {salvando && <p className="text-blue-400 text-xs mb-2">Salvando...</p>}
+        {erro && <p className="text-red-400 text-xs mb-2">{erro}</p>}
         <div className="space-y-2">
           {items.map(({ key, label }) => (
             <div key={key} className="flex items-center justify-between bg-gray-900 rounded-lg px-3 py-2">
