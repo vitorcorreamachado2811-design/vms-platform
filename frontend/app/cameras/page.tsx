@@ -65,8 +65,9 @@ function mjpegUrl(cameraId: string) {
 }
 
 // Tipos de regiao desenhados como LINHA (cruzamento lado A -> lado B),
-// em vez de retangulo (area/presenca).
-const TIPOS_LINHA = ['copos']
+// em vez de retangulo (area/presenca). Nenhum tipo usa isso no momento;
+// "copos" foi revertido para area/presenca (caixa), nao cruzamento de linha.
+const TIPOS_LINHA: string[] = []
 function ehLinha(tipo: string) {
   return TIPOS_LINHA.includes(tipo)
 }
