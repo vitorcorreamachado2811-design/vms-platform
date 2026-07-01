@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const MEDIAMTX_URL = process.env.NEXT_PUBLIC_MEDIAMTX_URL || 'https://wonderful-laughter-production-5858.up.railway.app'
+const API = 'https://vms-platform-production.up.railway.app'
 
 interface HLSPlayerProps {
   cameraId: string
@@ -17,12 +18,32 @@ export function HLSPlayer({ cameraId, cameraName, onClose }: HLSPlayerProps) {
   const [status, setStatus]   = useState<Status>('connecting')
   const [latency, setLatency] = useState<number | null>(null)
   const startRef  = useRef(Date.now())
+  const hlsUrlRef = useRef<string | null>(null)
 
-  const hlsUrl = `${MEDIAMTX_URL}/${cameraId}/index.m3u8`
+  async function buscarHlsUrl(): Promise<string | null> {
+    try {
+      const token = localStorage.getItem('vms_token')
+      const usuarioStr = localStorage.getItem('vms_usuario')
+      if (!token || !usuarioStr) return null
+      const usuario = JSON.parse(usuarioStr)
+      const res = await fetch(`${API}/cameras/${cameraId}/hls-token?usuario_id=${usuario.id}&token=${token}`)
+      if (!res.ok) return null
+      const data = await res.json()
+      return `${MEDIAMTX_URL}/${cameraId}/index.m3u8?user=viewer&pass=${data.token}`
+    } catch {
+      return null
+    }
+  }
 
   useEffect(() => {
-    iniciar()
-    return () => parar()
+    let cancelado = false
+    buscarHlsUrl().then(url => {
+      if (cancelado) return
+      hlsUrlRef.current = url
+      if (url) iniciar()
+      else setStatus('error')
+    })
+    return () => { cancelado = true; parar() }
   }, [cameraId])
 
   async function iniciar() {
@@ -30,7 +51,8 @@ export function HLSPlayer({ cameraId, cameraName, onClose }: HLSPlayerProps) {
     startRef.current = Date.now()
 
     const video = videoRef.current
-    if (!video) return
+    const hlsUrl = hlsUrlRef.current
+    if (!video || !hlsUrl) return
 
     // Tenta HLS nativo (Safari) primeiro
     if (video.canPlayType('application/vnd.apple.mpegurl')) {

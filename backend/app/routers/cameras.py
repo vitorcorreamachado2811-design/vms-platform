@@ -267,13 +267,10 @@ async def webrtc_stop(camera_id: str):
     return {"ok": True}
 
 
-@router.get("/{camera_id}/rtsp-token")
-def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session = Depends(get_db)):
-    """
-    Devolve uma URL rtsp:// com credenciais de leitura de curta duracao para o
-    player nativo do app. Valida o token de sessao do usuario (mesmo esquema do
-    /auth/login) e confere que a camera pertence a empresa do usuario.
-    """
+def _validar_usuario_dono_camera(camera_id, usuario_id: str, token: str, db: Session) -> Usuario:
+    """Valida o token de sessao do usuario (mesmo esquema do /auth/login) e
+    confere que a camera pertence a empresa do usuario. Usado tanto pelo
+    player RTSP do app quanto pelo player HLS do painel web."""
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=401, detail="Usuario invalido")
@@ -286,6 +283,14 @@ def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session =
         raise HTTPException(status_code=404, detail="Camera nao encontrada")
     if str(camera.empresa_id) != str(usuario.empresa_id):
         raise HTTPException(status_code=403, detail="Camera nao pertence a empresa do usuario")
+    return usuario
+
+
+@router.get("/{camera_id}/rtsp-token")
+def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session = Depends(get_db)):
+    """Devolve uma URL rtsp:// com credenciais de leitura de curta duracao para
+    o player nativo do app."""
+    usuario = _validar_usuario_dono_camera(camera_id, usuario_id, token, db)
 
     if not MEDIAMTX_PUBLIC_RTSP_HOST:
         raise HTTPException(status_code=503, detail="RTSP publico nao configurado (MEDIAMTX_PUBLIC_RTSP_HOST ausente)")
@@ -293,6 +298,15 @@ def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session =
     rtsp_token = gerar_rtsp_token(str(camera_id))
     rtsp_url = f"rtsp://{usuario.empresa_id}:{rtsp_token}@{MEDIAMTX_PUBLIC_RTSP_HOST}/{camera_id}"
     return {"rtsp_url": rtsp_url, "expira_em_segundos": RTSP_TOKEN_TTL_SEGUNDOS}
+
+
+@router.get("/{camera_id}/hls-token")
+def obter_hls_token(camera_id: UUID, usuario_id: str, token: str, db: Session = Depends(get_db)):
+    """Devolve um token de leitura de curta duracao para o player HLS do
+    painel web (desenho de regioes), que busca o .m3u8 direto do MediaMTX."""
+    _validar_usuario_dono_camera(camera_id, usuario_id, token, db)
+    hls_token = gerar_rtsp_token(str(camera_id))
+    return {"token": hls_token, "expira_em_segundos": RTSP_TOKEN_TTL_SEGUNDOS}
 
 
 @router.get("/", response_model=list[CameraResponse])
