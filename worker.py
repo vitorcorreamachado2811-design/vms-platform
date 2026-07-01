@@ -997,7 +997,10 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
     if not MEDIAMTX_RTSP or not MEDIAMTX_PUBLISH_SECRET:
         return
     base = MEDIAMTX_RTSP.replace("rtsp://", "")
-    destino = f"rtsp://publisher:{MEDIAMTX_PUBLISH_SECRET}@{base}/{camera_id}"
+    # Credenciais via query string em vez de user:pass@host: o ffmpeg nao reenvia
+    # o ANNOUNCE com Authorization apos o desafio 401 do MediaMTX, entao o auth
+    # via user:pass@ nunca completa. Via query, o MediaMTX valida no primeiro request.
+    destino = f"rtsp://{base}/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
     print(f"[PUBLISHER] {nome} -> {MEDIAMTX_RTSP}/{camera_id}", flush=True)
     while _publisher_status.get(camera_id, {}).get("rodando"):
         proc = None
