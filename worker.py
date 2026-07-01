@@ -996,12 +996,14 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
     """Publica camera no MediaMTX via ffmpeg (autenticado) para leitura RTSP/WebRTC."""
     if not MEDIAMTX_RTSP or not MEDIAMTX_PUBLISH_SECRET:
         return
-    base = MEDIAMTX_RTSP.replace("rtsp://", "")
-    # Credenciais via query string em vez de user:pass@host: o ffmpeg nao reenvia
-    # o ANNOUNCE com Authorization apos o desafio 401 do MediaMTX, entao o auth
-    # via user:pass@ nunca completa. Via query, o MediaMTX valida no primeiro request.
-    destino = f"rtsp://{base}/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
-    print(f"[PUBLISHER] {nome} -> {MEDIAMTX_RTSP}/{camera_id}", flush=True)
+    hostname = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
+    # Publica via RTMP (nao RTSP): o muxer RTSP do ffmpeg descarta query strings
+    # e nao reenvia o ANNOUNCE com Authorization apos o desafio 401 do MediaMTX,
+    # entao autenticacao via user:pass@ ou via query nunca completa em RTSP.
+    # O muxer RTMP do ffmpeg suporta ?user=&pass= normalmente (documentado no
+    # MediaMTX). A leitura pelo app continua via RTSP normalmente.
+    destino = f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
+    print(f"[PUBLISHER] {nome} -> rtmp://{hostname}:1935/{camera_id}", flush=True)
     while _publisher_status.get(camera_id, {}).get("rodando"):
         proc = None
         try:
@@ -1012,8 +1014,7 @@ def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
                 "-i", rtsp_url,
                 "-c", "copy",
                 "-an",
-                "-f", "rtsp",
-                "-rtsp_transport", "tcp", destino
+                "-f", "flv", destino
             ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             _publisher_procs[camera_id] = proc
             while _publisher_status.get(camera_id, {}).get("rodando"):
