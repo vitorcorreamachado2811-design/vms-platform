@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 from app.database import get_db
 from app.models.models import Evento
 
@@ -52,12 +53,51 @@ def atualizar_evento(evento_id: UUID, body: EventoUpdate, db: Session = Depends(
     return evento
 
 @router.get("/", response_model=list[EventoResponse])
-def listar_eventos(empresa_id: Optional[str] = None, db: Session = Depends(get_db)):
+def listar_eventos(empresa_id: Optional[str] = None, incluir_copos: bool = False, db: Session = Depends(get_db)):
     from app.models.models import Camera
     query = db.query(Evento).join(Evento.camera)
     if empresa_id:
         query = query.filter(Camera.empresa_id == empresa_id)
+    if not incluir_copos:
+        # Contagem de copos/potes tem relatorio proprio (GET /eventos/relatorio-copos)
+        # e nao deve poluir a lista geral de alertas/eventos.
+        query = query.filter(Evento.tipo != "copo_pote_contado")
     return query.order_by(Evento.criado_em.desc()).limit(50).all()
+
+@router.get("/relatorio-copos")
+def relatorio_copos(empresa_id: str, dias: int = 1, db: Session = Depends(get_db)):
+    """Relatorio agregado de copos/potes contados: total geral, por camera e por hora."""
+    inicio = datetime.now(UTC) - timedelta(days=dias)
+    rows = db.execute(text("""
+        SELECT c.id as camera_id, c.nome as camera_nome, e.criado_em
+        FROM eventos e
+        JOIN cameras c ON c.id = e.camera_id
+        WHERE c.empresa_id = :empresa_id
+          AND e.tipo = 'copo_pote_contado'
+          AND e.criado_em >= :inicio
+        ORDER BY e.criado_em
+    """), {"empresa_id": empresa_id, "inicio": inicio}).fetchall()
+
+    total_geral = len(rows)
+    por_camera: dict = {}
+    por_hora: dict = {}
+    for r in rows:
+        por_camera[r.camera_nome] = por_camera.get(r.camera_nome, 0) + 1
+        hora_str = r.criado_em.strftime("%H:00")
+        por_hora[hora_str] = por_hora.get(hora_str, 0) + 1
+
+    return {
+        "total_geral": total_geral,
+        "periodo_dias": dias,
+        "por_camera": [
+            {"camera": k, "total": v}
+            for k, v in sorted(por_camera.items(), key=lambda x: -x[1])
+        ],
+        "por_hora": [
+            {"hora": f"{h:02d}h", "total": por_hora.get(f"{h:02d}:00", 0)}
+            for h in range(24)
+        ],
+    }
 
 @router.get("/camera/{camera_id}", response_model=list[EventoResponse])
 def eventos_por_camera(camera_id: UUID, db: Session = Depends(get_db)):

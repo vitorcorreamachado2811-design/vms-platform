@@ -121,6 +121,7 @@ export default function EventosPage() {
 
   function labelEvento(tipo: string) {
     if (tipo === 'comportamento_suspeito_caixa') return '🚨 COMPORTAMENTO SUSPEITO'
+    if (tipo === 'copo_pote_contado') return '🥤 Copo/Pote'
     if (ehAlerta(tipo)) return '⚠️ ' + tipo.toUpperCase().replace('_', ' ')
     return tipo
   }

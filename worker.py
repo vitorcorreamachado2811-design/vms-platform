@@ -22,7 +22,11 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 print("Carregando modelo YOLOv8 Pose...", flush=True)
 model_pose = YOLO("yolov8n-pose.pt")
-print("Modelo carregado!", flush=True)
+print("Modelo Pose carregado!", flush=True)
+
+print("Carregando modelo YOLOv8 Objetos (copos/potes)...", flush=True)
+model_objetos = YOLO("yolov8n.pt")
+print("Modelo Objetos carregado!", flush=True)
 
 OMBRO_ESQ     = 5
 OMBRO_DIR     = 6
@@ -504,7 +508,7 @@ def buscar_analiticos(camera_id: str) -> dict:
         "queda_leito": False, "queda_pe": False, "pessoa": False,
         "banheiro_tempo": False, "gesto_socorro": False,
         "linha_contagem": False, "habitos": False,
-        "freezer": False, "caixa": False
+        "freezer": False, "caixa": False, "copos": False
     }
 
 def iou(boxA, boxB):
@@ -714,6 +718,75 @@ def detectar_comportamento_suspeito(tid, kps, caixa_regiao, w, h, agora_dt, agor
 
 
 # ---------------------------------------------------------
+# CONTAGEM DE COPOS/POTES NA AREA DESENHADA (ex: em cima da balanca)
+# ---------------------------------------------------------
+CLASSE_COPO = 41   # 'cup' no COCO
+CLASSE_POTE = 45   # 'bowl' no COCO
+COPO_CONF_MIN = 0.35
+
+_tracks_copos: dict = {}    # {camera_id: {tid: {"box": [...]}}}
+_next_id_copos: dict = {}   # {camera_id: int}
+
+def contar_copos_potes(frame, camera_id: str, nome: str, regiao):
+    """
+    Detecta copos/potes (classes COCO 'cup' e 'bowl') dentro da regiao
+    desenhada e conta cada objeto NOVO que aparece nela, usando um
+    tracker simples por IOU para nao contar o mesmo objeto repetidas
+    vezes enquanto ele permanece visivel na area.
+    """
+    if regiao is None:
+        return
+    try:
+        h, w = frame.shape[:2]
+        results = model_objetos(frame, verbose=False, classes=[CLASSE_COPO, CLASSE_POTE])
+
+        deteccoes = []
+        for result in results:
+            for box in result.boxes:
+                conf = float(box.conf[0])
+                if conf < COPO_CONF_MIN:
+                    continue
+                coords = box.xyxy[0].cpu().numpy()
+                cx = (coords[0] + coords[2]) / 2 / w
+                cy = (coords[1] + coords[3]) / 2 / h
+                if pessoa_na_regiao(cx, cy, regiao):
+                    deteccoes.append({"box": coords, "conf": conf})
+
+        tracks = _tracks_copos.get(camera_id, {})
+        usados = set()
+        novos_tracks = {}
+
+        for tid, tr in tracks.items():
+            melhor_iou = 0.3
+            melhor_idx = -1
+            for idx, det in enumerate(deteccoes):
+                if idx in usados:
+                    continue
+                score = iou(tr["box"], det["box"])
+                if score > melhor_iou:
+                    melhor_iou = score
+                    melhor_idx = idx
+            if melhor_idx >= 0:
+                usados.add(melhor_idx)
+                novos_tracks[tid] = {"box": deteccoes[melhor_idx]["box"]}
+
+        next_id = _next_id_copos.get(camera_id, 0)
+        for idx, det in enumerate(deteccoes):
+            if idx in usados:
+                continue
+            novos_tracks[next_id] = {"box": det["box"]}
+            print(f"[COPOS] {nome} novo copo/pote (conf={det['conf']:.0%})", flush=True)
+            # rtsp_url="" -> nao grava clipe, evento leve (evita sobrecarga com contagem frequente)
+            salvar_evento(camera_id, "copo_pote_contado", det["conf"], nome, "")
+            next_id += 1
+
+        _tracks_copos[camera_id] = novos_tracks
+        _next_id_copos[camera_id] = next_id
+    except Exception as e:
+        print(f"[COPOS] Erro {camera_id}: {e}", flush=True)
+
+
+# ---------------------------------------------------------
 # LOOP PRINCIPAL POR CAMERA
 # ---------------------------------------------------------
 def processar_camera(camera):
@@ -760,11 +833,21 @@ def processar_camera(camera):
             h, w    = frame.shape[:2]
             results = model_pose(frame, verbose=False)
 
+            cama     = next((r for r in regioes if r["tipo"] == "cama"),     None)
+            banheiro = next((r for r in regioes if r["tipo"] == "banheiro"), None)
+            cozinha  = next((r for r in regioes if r["tipo"] == "cozinha"),  None)
+            quarto   = next((r for r in regioes if r["tipo"] == "quarto"),   None)
+            caixa_regiao = next((r for r in regioes if r["tipo"] == "caixa"), None)
+            copos_regiao = next((r for r in regioes if r["tipo"] == "copos"), None)
+
             if analiticos.get("freezer", False):
                 analisar_nivel_freezer(frame, camera_id, empresa_id, regioes)
 
             if analiticos.get("caixa", False):
                 processar_caixa(frame, results, camera_id, empresa_id)
+
+            if analiticos.get("copos", False):
+                contar_copos_potes(frame, camera_id, nome, copos_regiao)
 
             deteccoes = []
             for result in results:
@@ -777,12 +860,6 @@ def processar_camera(camera):
                     if result.keypoints is not None and i < len(result.keypoints.data):
                         kps = result.keypoints.data[i].cpu().numpy()
                     deteccoes.append({"box": coords, "conf": conf, "kps": kps})
-
-            cama     = next((r for r in regioes if r["tipo"] == "cama"),     None)
-            banheiro = next((r for r in regioes if r["tipo"] == "banheiro"), None)
-            cozinha  = next((r for r in regioes if r["tipo"] == "cozinha"),  None)
-            quarto   = next((r for r in regioes if r["tipo"] == "quarto"),   None)
-            caixa_regiao = next((r for r in regioes if r["tipo"] == "caixa"), None)
 
             novos_tracks = {}; usados = set()
 
