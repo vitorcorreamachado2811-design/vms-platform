@@ -20,7 +20,7 @@ hlsPartDuration: 200ms
 webrtcAllowOrigin: '*'
 
 authMethod: http
-authHTTPAddress: https://vms-platform-production.up.railway.app/mediamtx/auth
+authHTTPAddress: http://vms-platform.railway.internal:8000/mediamtx/auth
 authHTTPExclude:
   - action: api
   - action: metrics
