@@ -88,6 +88,41 @@ def agendar_publish(camera_id: str, frame):
 
 
 MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
+MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
+
+_publish_rtmp_procs: dict = {}
+
+def _iniciar_processo_publish_rtmp(camera_id: str):
+    hostname = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
+    destino = f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
+    return subprocess.Popen([
+        "ffmpeg", "-loglevel", "warning",
+        "-f", "image2pipe", "-vcodec", "mjpeg", "-r", str(FPS_BUFFER), "-i", "pipe:0",
+        "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+        "-pix_fmt", "yuv420p", "-f", "flv", destino
+    ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def publicar_frame_rtmp(camera_id: str, frame_jpeg: bytes):
+    """Reaproveita o mesmo frame JPEG que a captura continua ja le pra IA,
+    publicando no MediaMTX via RTMP sem abrir uma 2a/3a conexao RTSP na
+    camera/DVR (varios DVRs baratos limitam conexoes RTSP simultaneas)."""
+    if not MEDIAMTX_PUBLISH_SECRET:
+        return
+    proc = _publish_rtmp_procs.get(camera_id)
+    if proc is None or proc.poll() is not None:
+        try:
+            proc = _iniciar_processo_publish_rtmp(camera_id)
+            _publish_rtmp_procs[camera_id] = proc
+        except Exception as e:
+            print(f"[PUBLISHER] Erro ao iniciar {camera_id}: {e}", flush=True)
+            return
+    try:
+        proc.stdin.write(frame_jpeg)
+        proc.stdin.flush()
+    except Exception:
+        try: proc.kill()
+        except: pass
+        _publish_rtmp_procs[camera_id] = None
 
 _hls_processos: dict = {}
 
@@ -417,6 +452,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                             adicionar_frame_buffer(camera_id, frame)
                             set_frame_atual(camera_id, frame)
                             agendar_publish(camera_id, frame)
+                            publicar_frame_rtmp(camera_id, frame_data)
         except Exception as e:
             print(f"[CAPTURA] Erro {camera_id}: {e}", flush=True)
         finally:
@@ -797,7 +833,6 @@ def processar_camera(camera):
 
     print(f"[{nome}] Iniciando monitoramento...", flush=True)
     iniciar_captura_continua(camera_id, rtsp_url)
-    iniciar_publisher(camera_id, rtsp_url, nome)
 
     tracks = {}; next_id = 0; linha = None; regioes = []; config_refresh = 0
     heatmap_acc = defaultdict(float); heatmap_ultimo_envio = time.time()
@@ -984,59 +1019,6 @@ def processar_camera(camera):
         except Exception as e:
             print(f"[{nome}] Erro: {e}. Reiniciando em 10s...", flush=True)
             time.sleep(10)
-
-
-MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "")
-MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
-
-_publisher_status: dict = {}
-_publisher_procs: dict  = {}
-
-def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
-    """Publica camera no MediaMTX via ffmpeg (autenticado) para leitura RTSP/WebRTC."""
-    if not MEDIAMTX_RTSP or not MEDIAMTX_PUBLISH_SECRET:
-        return
-    hostname = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
-    # Publica via RTMP (nao RTSP): o muxer RTSP do ffmpeg descarta query strings
-    # e nao reenvia o ANNOUNCE com Authorization apos o desafio 401 do MediaMTX,
-    # entao autenticacao via user:pass@ ou via query nunca completa em RTSP.
-    # O muxer RTMP do ffmpeg suporta ?user=&pass= normalmente (documentado no
-    # MediaMTX). A leitura pelo app continua via RTSP normalmente.
-    destino = f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
-    print(f"[PUBLISHER] {nome} -> rtmp://{hostname}:1935/{camera_id}", flush=True)
-    while _publisher_status.get(camera_id, {}).get("rodando"):
-        proc = None
-        try:
-            proc = subprocess.Popen([
-                "ffmpeg", "-loglevel", "warning",
-                "-fflags", "+genpts+discardcorrupt",
-                "-use_wallclock_as_timestamps", "1",
-                "-i", rtsp_url,
-                "-c", "copy",
-                "-an",
-                "-f", "flv", destino
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            _publisher_procs[camera_id] = proc
-            while _publisher_status.get(camera_id, {}).get("rodando"):
-                if proc.poll() is not None:
-                    err = proc.stderr.read(500).decode('utf-8', errors='ignore')
-                    print(f"[PUBLISHER] {nome} erro ffmpeg: {err}", flush=True)
-                    break
-                time.sleep(2)
-        except Exception as e:
-            print(f"[PUBLISHER] Erro {nome}: {e}", flush=True)
-        finally:
-            if proc:
-                try: proc.kill()
-                except: pass
-        if _publisher_status.get(camera_id, {}).get("rodando"):
-            time.sleep(3)
-
-def iniciar_publisher(camera_id: str, rtsp_url: str, nome: str):
-    if not MEDIAMTX_RTSP or _publisher_status.get(camera_id, {}).get("rodando"):
-        return
-    _publisher_status[camera_id] = {"rodando": True}
-    threading.Thread(target=_thread_publisher, args=(camera_id, rtsp_url, nome), daemon=True).start()
 
 
 # ---------------------------------------------------------
