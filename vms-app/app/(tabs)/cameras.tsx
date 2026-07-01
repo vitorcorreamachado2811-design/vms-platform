@@ -1,29 +1,45 @@
-﻿import { useEffect, useState } from "react"
+﻿import { useEffect, useRef, useState } from "react"
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, Modal, SafeAreaView, ActivityIndicator,
 } from "react-native"
-import { WebView } from "react-native-webview"
+import { VLCPlayer } from "react-native-vlc-media-player"
 import { useAuth } from "../../src/AuthContext"
 
 const API = "https://vms-platform-production.up.railway.app"
 
 interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; empresa_id: string }
 
-function MjpegViewer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
-  const mjpegUrl = `${API}/cameras/${camera.id}/mjpeg`
-  const html = `<!DOCTYPE html><html><head>
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh}
-    img{width:100%;height:100vh;object-fit:contain}
-    #st{position:fixed;top:8px;left:8px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:4px 8px;border-radius:4px;font-family:sans-serif}
-    #lv{position:fixed;top:8px;right:8px;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 7px;border-radius:4px;display:none;font-family:sans-serif;letter-spacing:1px}
-    </style></head><body>
-    <div id="st">Conectando...</div><div id="lv">AO VIVO</div>
-    <img src="${mjpegUrl}"
-      onload="document.getElementById('st').style.display='none';document.getElementById('lv').style.display='block'"
-      onerror="document.getElementById('st').textContent='Sem sinal - reconectando...';setTimeout(()=>{this.src='${mjpegUrl}?t='+Date.now()},3000)" />
-    </body></html>`
+function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const { usuario, token } = useAuth()
+  const [rtspUrl, setRtspUrl] = useState<string | null>(null)
+  const [status, setStatus] = useState<"conectando" | "ao_vivo" | "sem_sinal">("conectando")
+  const reconectarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  async function buscarToken() {
+    if (!usuario || !token) return
+    try {
+      const res = await fetch(
+        `${API}/cameras/${camera.id}/rtsp-token?usuario_id=${usuario.id}&token=${token}`
+      )
+      if (!res.ok) { setStatus("sem_sinal"); agendarReconexao(); return }
+      const data = await res.json()
+      setRtspUrl(data.rtsp_url)
+    } catch {
+      setStatus("sem_sinal")
+      agendarReconexao()
+    }
+  }
+
+  function agendarReconexao() {
+    if (reconectarRef.current) clearTimeout(reconectarRef.current)
+    reconectarRef.current = setTimeout(buscarToken, 3000)
+  }
+
+  useEffect(() => {
+    buscarToken()
+    return () => { if (reconectarRef.current) clearTimeout(reconectarRef.current) }
+  }, [camera.id, usuario, token])
 
   return (
     <Modal animationType="slide" statusBarTranslucent>
@@ -37,9 +53,28 @@ function MjpegViewer({ camera, onClose }: { camera: Camera; onClose: () => void 
             <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>x</Text>
           </TouchableOpacity>
         </View>
-        <WebView source={{ html }} style={{ flex: 1, backgroundColor: "#000" }}
-          scrollEnabled={false} bounces={false} allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false} mixedContentMode="always" />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          {rtspUrl && (
+            <VLCPlayer
+              style={{ width: "100%", height: "100%" }}
+              autoplay
+              resizeMode="contain"
+              source={{ uri: rtspUrl }}
+              onPlaying={() => setStatus("ao_vivo")}
+              onBuffering={() => setStatus("conectando")}
+              onError={() => { setStatus("sem_sinal"); agendarReconexao() }}
+              onStopped={() => { setStatus("sem_sinal"); agendarReconexao() }}
+            />
+          )}
+          {status !== "ao_vivo" && (
+            <View style={mv.overlay} pointerEvents="none">
+              <ActivityIndicator color="#3b82f6" size="large" />
+              <Text style={mv.overlayTexto}>
+                {status === "sem_sinal" ? "Sem sinal - reconectando..." : "Conectando..."}
+              </Text>
+            </View>
+          )}
+        </View>
       </SafeAreaView>
     </Modal>
   )
@@ -97,7 +132,7 @@ export default function CamerasScreen() {
           contentContainerStyle={{ padding: 16, gap: 12 }}
           renderItem={({ item }) => <CameraCard camera={item} onAoVivo={() => setCameraAberta(item)} />} />
       )}
-      {cameraAberta && <MjpegViewer camera={cameraAberta} onClose={() => setCameraAberta(null)} />}
+      {cameraAberta && <RtspViewer camera={cameraAberta} onClose={() => setCameraAberta(null)} />}
     </SafeAreaView>
   )
 }
@@ -129,4 +164,6 @@ const mv = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e" },
   nome: { color: "#fff", fontWeight: "700", fontSize: 15 },
   closeBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
+  overlay: { position: "absolute", alignItems: "center", justifyContent: "center", gap: 10 },
+  overlayTexto: { color: "#9ca3af", fontSize: 13 },
 })

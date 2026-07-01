@@ -6,6 +6,7 @@ from app.routers import habitos
 from app.routers import vendas
 from app.routers import freezer
 from app.routers import caixa
+from app.routers import mediamtx_webhook
 
 Base.metadata.create_all(bind=engine)
 
@@ -30,6 +31,7 @@ app.include_router(caixa.router, prefix="/caixa", tags=["Caixa"])
 app.include_router(freezer.router, prefix="/freezer", tags=["Freezer"])
 app.include_router(vendas.router, prefix="/vendas", tags=["Vendas"])
 app.include_router(habitos.router, prefix="/habitos", tags=["Habitos"])
+app.include_router(mediamtx_webhook.router, prefix="/mediamtx", tags=["MediaMTX"])
 
 @app.get("/")
 def root():

@@ -41,6 +41,7 @@ async def criar_worker_railway(empresa_id: str, empresa_nome: str):
                 ("SUPABASE_URL", os.environ.get("SUPABASE_URL", "")),
                 ("SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_KEY", "")),
                 ("MEDIAMTX_RTSP_URL", os.environ.get("MEDIAMTX_RTSP_URL", "")),
+                ("MEDIAMTX_PUBLISH_SECRET", os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")),
             ]
 
             for nome_var, valor_var in variaveis:

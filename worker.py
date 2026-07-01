@@ -797,6 +797,7 @@ def processar_camera(camera):
 
     print(f"[{nome}] Iniciando monitoramento...", flush=True)
     iniciar_captura_continua(camera_id, rtsp_url)
+    iniciar_publisher(camera_id, rtsp_url, nome)
 
     tracks = {}; next_id = 0; linha = None; regioes = []; config_refresh = 0
     heatmap_acc = defaultdict(float); heatmap_ultimo_envio = time.time()
@@ -986,21 +987,22 @@ def processar_camera(camera):
 
 
 MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "")
+MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
 
 _publisher_status: dict = {}
 _publisher_procs: dict  = {}
 
 def _thread_publisher(camera_id: str, rtsp_url: str, nome: str):
-    """Publica camera no MediaMTX via ffmpeg para distribuicao WebRTC."""
-    if not MEDIAMTX_RTSP:
+    """Publica camera no MediaMTX via ffmpeg (autenticado) para leitura RTSP/WebRTC."""
+    if not MEDIAMTX_RTSP or not MEDIAMTX_PUBLISH_SECRET:
         return
-    destino = f"{MEDIAMTX_RTSP}/{camera_id}"
-    print(f"[PUBLISHER] {nome} -> {destino}", flush=True)
+    base = MEDIAMTX_RTSP.replace("rtsp://", "")
+    destino = f"rtsp://publisher:{MEDIAMTX_PUBLISH_SECRET}@{base}/{camera_id}"
+    print(f"[PUBLISHER] {nome} -> {MEDIAMTX_RTSP}/{camera_id}", flush=True)
     while _publisher_status.get(camera_id, {}).get("rodando"):
         proc = None
         try:
             proc = subprocess.Popen([
-                "ffmpeg", "-loglevel", "warning",
                 "ffmpeg", "-loglevel", "warning",
                 "-fflags", "+genpts+discardcorrupt",
                 "-use_wallclock_as_timestamps", "1",

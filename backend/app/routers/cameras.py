@@ -13,8 +13,10 @@ import time
 import asyncio
 import io
 from app.database import get_db
-from app.models.models import Camera, Empresa
+from app.models.models import Camera, Empresa, Usuario
 from app.railway_utils import reiniciar_worker_railway
+from app.mediamtx_auth import gerar_rtsp_token, RTSP_TOKEN_TTL_SEGUNDOS
+import hashlib
 import asyncio
 
 router = APIRouter()
@@ -137,6 +139,9 @@ import os
 
 MEDIAMTX_URL  = os.environ.get("MEDIAMTX_URL", "")
 MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
+# Host:porta publicos do TCP Proxy do Railway para o servico MediaMTX (ex: algumacoisa.proxy.rlwy.net:12345)
+# Configurado apos criar o TCP Proxy no dashboard do Railway (porta interna 8554).
+MEDIAMTX_PUBLIC_RTSP_HOST = os.environ.get("MEDIAMTX_PUBLIC_RTSP_HOST", "")
 
 # Publisher sob demanda — so roda quando alguem esta assistindo
 _publisher_procs: dict  = {}
@@ -260,6 +265,34 @@ async def webrtc_stop(camera_id: str):
     """Notifica que o viewer fechou o player."""
     remover_viewer(camera_id)
     return {"ok": True}
+
+
+@router.get("/{camera_id}/rtsp-token")
+def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session = Depends(get_db)):
+    """
+    Devolve uma URL rtsp:// com credenciais de leitura de curta duracao para o
+    player nativo do app. Valida o token de sessao do usuario (mesmo esquema do
+    /auth/login) e confere que a camera pertence a empresa do usuario.
+    """
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuario invalido")
+    token_esperado = hashlib.sha256(f"{usuario.id}{usuario.email}".encode()).hexdigest()
+    if token != token_esperado:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera nao encontrada")
+    if str(camera.empresa_id) != str(usuario.empresa_id):
+        raise HTTPException(status_code=403, detail="Camera nao pertence a empresa do usuario")
+
+    if not MEDIAMTX_PUBLIC_RTSP_HOST:
+        raise HTTPException(status_code=503, detail="RTSP publico nao configurado (MEDIAMTX_PUBLIC_RTSP_HOST ausente)")
+
+    rtsp_token = gerar_rtsp_token(str(camera_id))
+    rtsp_url = f"rtsp://{usuario.empresa_id}:{rtsp_token}@{MEDIAMTX_PUBLIC_RTSP_HOST}/{camera_id}"
+    return {"rtsp_url": rtsp_url, "expira_em_segundos": RTSP_TOKEN_TTL_SEGUNDOS}
 
 
 @router.get("/", response_model=list[CameraResponse])

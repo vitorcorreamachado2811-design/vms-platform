@@ -19,15 +19,12 @@ hlsPartDuration: 200ms
 
 webrtcAllowOrigin: '*'
 
-authInternalUsers:
-  - user: any
-    pass:
-    ips: []
-    permissions:
-      - action: read
-        path:
-      - action: publish
-        path:
+authMethod: http
+authHTTPAddress: https://vms-platform-production.up.railway.app/mediamtx/auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
 
 paths:
   all_others:
