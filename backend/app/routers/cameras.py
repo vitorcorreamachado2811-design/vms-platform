@@ -296,7 +296,10 @@ def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session =
         raise HTTPException(status_code=503, detail="RTSP publico nao configurado (MEDIAMTX_PUBLIC_RTSP_HOST ausente)")
 
     rtsp_token = gerar_rtsp_token(str(camera_id))
-    rtsp_url = f"rtsp://{usuario.empresa_id}:{rtsp_token}@{MEDIAMTX_PUBLIC_RTSP_HOST}/{camera_id}"
+    # Credenciais via query string em vez de user:pass@host: o libVLC do
+    # react-native-vlc-media-player no Android nao lida bem com credenciais
+    # embutidas na URI RTSP (mesma limitacao encontrada no ffmpeg pro publish).
+    rtsp_url = f"rtsp://{MEDIAMTX_PUBLIC_RTSP_HOST}/{camera_id}?user=viewer&pass={rtsp_token}"
     return {"rtsp_url": rtsp_url, "expira_em_segundos": RTSP_TOKEN_TTL_SEGUNDOS}
 
 
