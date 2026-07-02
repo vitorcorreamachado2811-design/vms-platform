@@ -90,39 +90,9 @@ def agendar_publish(camera_id: str, frame):
 MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
 MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
 
-_publish_rtmp_procs: dict = {}
-
-def _iniciar_processo_publish_rtmp(camera_id: str):
+def _destino_publish_rtmp(camera_id: str) -> str:
     hostname = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
-    destino = f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
-    return subprocess.Popen([
-        "ffmpeg", "-loglevel", "warning",
-        "-f", "image2pipe", "-vcodec", "mjpeg", "-r", str(FPS_BUFFER), "-i", "pipe:0",
-        "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-        "-pix_fmt", "yuv420p", "-f", "flv", destino
-    ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-def publicar_frame_rtmp(camera_id: str, frame_jpeg: bytes):
-    """Reaproveita o mesmo frame JPEG que a captura continua ja le pra IA,
-    publicando no MediaMTX via RTMP sem abrir uma 2a/3a conexao RTSP na
-    camera/DVR (varios DVRs baratos limitam conexoes RTSP simultaneas)."""
-    if not MEDIAMTX_PUBLISH_SECRET:
-        return
-    proc = _publish_rtmp_procs.get(camera_id)
-    if proc is None or proc.poll() is not None:
-        try:
-            proc = _iniciar_processo_publish_rtmp(camera_id)
-            _publish_rtmp_procs[camera_id] = proc
-        except Exception as e:
-            print(f"[PUBLISHER] Erro ao iniciar {camera_id}: {e}", flush=True)
-            return
-    try:
-        proc.stdin.write(frame_jpeg)
-        proc.stdin.flush()
-    except Exception:
-        try: proc.kill()
-        except: pass
-        _publish_rtmp_procs[camera_id] = None
+    return f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
 
 _hls_processos: dict = {}
 
@@ -416,11 +386,21 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
     while _captura_status.get(camera_id, {}).get("rodando"):
         proc = None
         try:
-            proc = subprocess.Popen([
+            cmd = [
                 "ffmpeg", "-rtsp_transport", "tcp", "-i", rtsp_url,
-                "-vf", f"fps={FPS_BUFFER}", "-q:v", "8",
-                "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                "-map", "0:v", "-vf", f"fps={FPS_BUFFER}", "-q:v", "8",
+                "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
+            ]
+            if MEDIAMTX_PUBLISH_SECRET:
+                # Segunda saida no MESMO processo ffmpeg (nao abre conexao nova
+                # na camera/DVR nem processo extra - evita esgotar threads/processos
+                # do container com muitas cameras, como ja aconteceu antes).
+                cmd += [
+                    "-map", "0:v", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-tune", "zerolatency", "-pix_fmt", "yuv420p",
+                    "-f", "flv", _destino_publish_rtmp(camera_id),
+                ]
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             print(f"[CAPTURA] Conexao RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
 
             def _drenar_stderr_captura(p, cid):
@@ -452,7 +432,6 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                             adicionar_frame_buffer(camera_id, frame)
                             set_frame_atual(camera_id, frame)
                             agendar_publish(camera_id, frame)
-                            publicar_frame_rtmp(camera_id, frame_data)
         except Exception as e:
             print(f"[CAPTURA] Erro {camera_id}: {e}", flush=True)
         finally:
