@@ -63,13 +63,15 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
               resizeMode="contain"
               source={{
                 uri: rtspUrl,
-                // mediaOptions nao esta no tipo oficial da lib, mas e lido em runtime
-                // pelo native code (srcMap.getArray("mediaOptions")) para repassar
-                // opcoes brutas ao libVLC via Media.addOption().
+                // mediaOptions nao esta no tipo oficial da lib. --rtsp-tcp forca
+                // midia via TCP (o proxy do Railway nao aceita UDP). O libVLC pede
+                // credenciais via um LoginDialog nativo em vez de aceitar --rtsp-user/
+                // --rtsp-pwd direto - patch em node_modules (ver patches/) responde
+                // esse dialog usando o user/pass extraidos daqui.
                 mediaOptions: [
+                  "--rtsp-tcp",
                   "--rtsp-user=viewer",
                   `--rtsp-pwd=${rtspToken}`,
-                  "--verbose=0",
                 ],
               } as any}
               onPlaying={() => setStatus("ao_vivo")}
