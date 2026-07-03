@@ -16,6 +16,11 @@ hlsAllowOrigin: '*'
 hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
+# Default e 60s - muito pouco pra o tempo de conexao+buffer do player mobile
+# (ExoPlayer via rede movel/emulador), que as vezes passa disso so pra
+# terminar de buscar a playlist master e abrir a conexao pra de midia.
+# Sessao fechava antes do player conseguir buscar o proximo nivel.
+hlsMuxerCloseAfter: 300s
 
 webrtcAllowOrigin: '*'
 
