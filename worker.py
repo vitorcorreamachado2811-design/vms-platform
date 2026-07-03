@@ -340,19 +340,22 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
         proc = None
         try:
             cmd = [
-                "ffmpeg", "-rtsp_transport", "tcp", "-i", rtsp_url,
-                "-map", "0:v", "-vf", f"fps={FPS_BUFFER}", "-q:v", "8",
+                "ffmpeg", "-rtsp_transport", "tcp", "-threads", "1", "-i", rtsp_url,
+                "-map", "0:v", "-vf", f"fps={FPS_BUFFER}", "-q:v", "8", "-threads", "1",
                 "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
             ]
             if MEDIAMTX_PUBLISH_SECRET:
                 # Segunda saida no MESMO processo ffmpeg (nao abre conexao nova
                 # na camera/DVR nem processo extra - evita esgotar threads/processos
                 # do container com muitas cameras, como ja aconteceu antes).
+                # -threads 1 em cada saida: com 11 cameras rodando simultaneamente,
+                # os encoders multi-thread padrao esgotavam threads do container
+                # ("Resource temporarily unavailable").
                 cmd += [
                     "-map", "0:v",
                     "-vf", f"fps={FPS_BUFFER},scale=trunc(iw/2)*2:trunc(ih/2)*2",
                     "-c:v", "libx264", "-preset", "ultrafast",
-                    "-tune", "zerolatency", "-pix_fmt", "yuv420p",
+                    "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-threads", "1",
                     "-f", "flv", _destino_publish_rtmp(camera_id),
                 ]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
