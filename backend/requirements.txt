@@ -9,3 +9,4 @@ pydantic==2.11.5
 asyncpg==0.30.0
 alembic==1.15.2
 supabase
+httpx==0.27.2

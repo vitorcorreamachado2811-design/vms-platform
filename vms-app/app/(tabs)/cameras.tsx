@@ -47,22 +47,29 @@ async function conectar() {
     };
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
+    post('dbg:offer-criando');
     var offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    post('dbg:aguardando-ice');
     await new Promise(function(resolve) {
       if (pc.iceGatheringState === 'complete') { resolve(); return; }
       pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === 'complete') resolve(); };
       setTimeout(resolve, 2000);
     });
+    post('dbg:fetch-iniciando');
     var res = await fetch(${JSON.stringify(webrtcUrl)}, {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
       body: pc.localDescription.sdp,
     });
+    post('dbg:fetch-respondeu-' + res.status);
     if (!res.ok) throw new Error('backend ' + res.status);
     var answerSdp = await res.text();
+    post('dbg:setremote-iniciando');
     await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    post('dbg:setremote-ok');
   } catch (e) {
+    post('dbg:erro-' + (e && e.message ? e.message : String(e)));
     post('sem_sinal');
     setTimeout(conectar, 3000);
   }
@@ -79,6 +86,7 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
   if (!usuario || !token) return null
 
   const webrtcUrl = `${API}/cameras/${camera.id}/webrtc?usuario_id=${usuario.id}&token=${token}`
+  console.log("[WHEP] url:", webrtcUrl)
 
   return (
     <Modal animationType="slide" statusBarTranslucent>
@@ -101,7 +109,11 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
             javaScriptEnabled
             domStorageEnabled
             originWhitelist={["*"]}
-            onMessage={(e) => setStatus(e.nativeEvent.data as any)}
+            onMessage={(e) => {
+              const data = e.nativeEvent.data
+              if (data.startsWith("dbg:")) { console.log("[WHEP]", data); return }
+              setStatus(data as any)
+            }}
           />
           {status !== "ao_vivo" && (
             <View style={mv.overlay} pointerEvents="none">

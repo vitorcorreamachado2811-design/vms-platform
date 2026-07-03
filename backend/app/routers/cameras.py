@@ -155,31 +155,36 @@ async def webrtc_proxy(camera_id: str, usuario_id: str, token: str, request: Req
     if not MEDIAMTX_URL:
         raise HTTPException(status_code=503, detail="MediaMTX nao configurado")
 
-    import urllib.request
+    # httpx assincrono - o uvicorn roda com 1 worker (Procfile) e o
+    # MediaMTX chama de volta esse mesmo backend pra validar o token
+    # (authHTTPAddress). Uma chamada bloqueante aqui (urllib + time.sleep)
+    # trava o event loop inteiro e gera deadlock: essa rota fica esperando
+    # o MediaMTX responder, e o MediaMTX fica esperando o webhook de auth
+    # (que roda nesse mesmo processo) responder.
+    import httpx
     leitura_token = gerar_rtsp_token(str(camera_id))
     whep_url = f"{MEDIAMTX_URL}/{camera_id}/whep?user=viewer&pass={leitura_token}"
     sdp = await request.body()
 
-    for tentativa in range(5):
-        try:
-            req = urllib.request.Request(
-                whep_url,
-                data=sdp,
-                headers={"Content-Type": "application/sdp"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                answer_sdp = resp.read().decode('utf-8')
+    async with httpx.AsyncClient(timeout=10) as client:
+        for tentativa in range(5):
+            try:
+                resp = await client.post(
+                    whep_url,
+                    content=sdp,
+                    headers={"Content-Type": "application/sdp"},
+                )
+                resp.raise_for_status()
                 return Response(
-                    content=answer_sdp,
+                    content=resp.text,
                     media_type="application/sdp",
                     headers={"Access-Control-Allow-Origin": "*"}
                 )
-        except Exception as e:
-            if tentativa < 4:
-                time.sleep(2)
-            else:
-                return Response(content=f'Erro MediaMTX: {e}', status_code=502, headers={'Access-Control-Allow-Origin': '*'})
+            except Exception as e:
+                if tentativa < 4:
+                    await asyncio.sleep(2)
+                else:
+                    return Response(content=f'Erro MediaMTX: {e}', status_code=502, headers={'Access-Control-Allow-Origin': '*'})
 
 
 def _validar_usuario_dono_camera(camera_id, usuario_id: str, token: str, db: Session) -> Usuario:
