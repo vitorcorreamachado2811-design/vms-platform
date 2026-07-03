@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react"
+﻿import { useEffect, useMemo, useRef, useState } from "react"
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, Modal, SafeAreaView, ActivityIndicator,
@@ -24,6 +24,7 @@ function webrtcHtml(webrtcUrl: string) {
 <script>
 var pc = null;
 var video = document.getElementById('v');
+var stream = null;
 function post(status) {
   window.ReactNativeWebView.postMessage(status);
 }
@@ -31,10 +32,14 @@ async function conectar() {
   post('conectando');
   try {
     if (pc) { pc.close(); }
+    stream = new MediaStream();
     pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     pc.ontrack = function(evt) {
-      if (evt.streams[0]) {
-        video.srcObject = evt.streams[0];
+      // Nao confia em evt.streams[0] - o MediaMTX nao associa as tracks a
+      // um MediaStream (msid) de forma confiavel, entao montamos o nosso.
+      stream.addTrack(evt.track);
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
         video.play().then(function() { post('ao_vivo'); }).catch(function() {});
       }
     };
@@ -47,29 +52,22 @@ async function conectar() {
     };
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
-    post('dbg:offer-criando');
     var offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    post('dbg:aguardando-ice');
     await new Promise(function(resolve) {
       if (pc.iceGatheringState === 'complete') { resolve(); return; }
       pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === 'complete') resolve(); };
       setTimeout(resolve, 2000);
     });
-    post('dbg:fetch-iniciando');
     var res = await fetch(${JSON.stringify(webrtcUrl)}, {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
       body: pc.localDescription.sdp,
     });
-    post('dbg:fetch-respondeu-' + res.status);
     if (!res.ok) throw new Error('backend ' + res.status);
     var answerSdp = await res.text();
-    post('dbg:setremote-iniciando');
     await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
-    post('dbg:setremote-ok');
   } catch (e) {
-    post('dbg:erro-' + (e && e.message ? e.message : String(e)));
     post('sem_sinal');
     setTimeout(conectar, 3000);
   }
@@ -86,10 +84,14 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
   if (!usuario || !token) return null
 
   const webrtcUrl = `${API}/cameras/${camera.id}/webrtc?usuario_id=${usuario.id}&token=${token}`
-  console.log("[WHEP] url:", webrtcUrl)
+  // O source do WebView precisa manter a MESMA referencia entre re-renders
+  // (setStatus() re-renderiza o componente toda hora) - um objeto novo a
+  // cada render faz o WebView recarregar do zero, derrubando a conexao
+  // WebRTC que tinha acabado de conectar.
+  const webviewSource = useMemo(() => ({ html: webrtcHtml(webrtcUrl) }), [webrtcUrl])
 
   return (
-    <Modal animationType="slide" statusBarTranslucent>
+    <Modal animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
         <View style={mv.header}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -103,17 +105,13 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <WebView
             style={{ width: "100%", height: "100%", backgroundColor: "#000" }}
-            source={{ html: webrtcHtml(webrtcUrl) }}
+            source={webviewSource}
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false}
             javaScriptEnabled
             domStorageEnabled
             originWhitelist={["*"]}
-            onMessage={(e) => {
-              const data = e.nativeEvent.data
-              if (data.startsWith("dbg:")) { console.log("[WHEP]", data); return }
-              setStatus(data as any)
-            }}
+            onMessage={(e) => setStatus(e.nativeEvent.data as any)}
           />
           {status !== "ao_vivo" && (
             <View style={mv.overlay} pointerEvents="none">
@@ -209,7 +207,10 @@ const s = StyleSheet.create({
 })
 
 const mv = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827" },
+  // elevation/zIndex: o video do WebRTC dentro do WebView usa uma camada de
+  // overlay de hardware que ignora a ordem normal de empilhamento das views
+  // no Android - sem isso o video renderiza por cima do cabecalho.
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827", elevation: 10, zIndex: 10 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e" },
   nome: { color: "#fff", fontWeight: "700", fontSize: 15 },
   closeBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
