@@ -57,7 +57,7 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
           {rtspUrl && (
             <Video
               style={{ width: "100%", height: "100%" }}
-              source={{ uri: rtspUrl }}
+              source={{ uri: rtspUrl, type: "rtsp" }}
               resizeMode="contain"
               onLoad={() => setStatus("ao_vivo")}
               onBuffer={({ isBuffering }) => setStatus(isBuffering ? "conectando" : "ao_vivo")}
