@@ -351,11 +351,20 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                 # -threads 1 em cada saida: com 11 cameras rodando simultaneamente,
                 # os encoders multi-thread padrao esgotavam threads do container
                 # ("Resource temporarily unavailable").
+                # Resolucao/bitrate baixos e GOP curto (keyframe a cada ~2s):
+                # via TURN (necessario pq o Railway bloqueia UDP de entrada),
+                # um keyframe grande em 1080p vira muitos pacotes RTP - um so
+                # perdido/corrompido no relay derruba o frame inteiro, e o
+                # ExoPlayer/libwebrtc ficava pedindo keyframe em loop por
+                # 20s+ ate um chegar inteiro por sorte. Frame menor e mais
+                # frequente reduz drasticamente essa janela.
                 cmd += [
                     "-map", "0:v",
-                    "-vf", f"fps={FPS_BUFFER},scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                    "-vf", f"fps={FPS_BUFFER},scale=640:-2",
                     "-c:v", "libx264", "-preset", "ultrafast",
                     "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-threads", "1",
+                    "-b:v", "500k", "-maxrate", "500k", "-bufsize", "500k",
+                    "-g", str(FPS_BUFFER * 2),
                     "-f", "flv", _destino_publish_rtmp(camera_id),
                 ]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
