@@ -23,6 +23,16 @@ hlsPartDuration: 200ms
 hlsMuxerCloseAfter: 300s
 
 webrtcAllowOrigin: '*'
+# Railway nao aceita trafego UDP de entrada publicamente (so outbound) e
+# a porta publica do TCP Proxy e sempre aleatoria - o MediaMTX nao tem
+# como anunciar host/porta corretos nos candidatos ICE, entao a midia
+# WebRTC nunca conecta direto. Servidor TURN externo (VPS com IP fixo e
+# portas sob nosso controle) resolve isso - o MediaMTX so faz conexao
+# de SAIDA pro TURN (que o Railway permite), e o TURN vira o ponto
+# alcancavel pro cliente externo. username/password via MTX_WEBRTCICESERVERS2_0_*
+# (env vars no Railway, nao commitados aqui).
+webrtcICEServers2:
+  - url: turn:143.95.220.1:3478
 
 authMethod: http
 authHTTPAddress: http://vms-platform.railway.internal:8000/mediamtx/auth
