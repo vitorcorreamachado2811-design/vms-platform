@@ -94,53 +94,6 @@ def _destino_publish_rtmp(camera_id: str) -> str:
     hostname = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
     return f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
 
-_hls_processos: dict = {}
-
-def iniciar_hls(camera_id: str, rtsp_url: str):
-    """Publica camera no MediaMTX via RTSP. MediaMTX converte para HLS automaticamente."""
-    if camera_id in _hls_processos:
-        try: _hls_processos[camera_id].kill()
-        except: pass
-
-    destino = f"{MEDIAMTX_RTSP}/{camera_id}"
-    cmd = [
-        "ffmpeg", "-loglevel", "warning",
-        "-fflags", "+genpts+discardcorrupt",
-        "-use_wallclock_as_timestamps", "1",
-        "-rtsp_transport", "tcp",
-        "-i", rtsp_url,
-        "-c:v", "copy",
-        "-an",
-        "-f", "rtsp",
-        "-rtsp_transport", "tcp",
-        destino
-    ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    _hls_processos[camera_id] = proc
-    print(f"[HLS] Publicando {camera_id} -> {destino}", flush=True)
-
-    def _monitor_hls(p, cid):
-        # Dreno continuamente o stderr para nunca encher o buffer do pipe
-        # (se ninguem ler, o ffmpeg trava esperando espaco e o push HLS morre)
-        ultimo_log = 0
-        for linha in iter(p.stderr.readline, b''):
-            if not linha:
-                break
-            agora = time.time()
-            # Evita spam: só loga no máximo 1x a cada 30s por câmera
-            if agora - ultimo_log > 30:
-                texto = linha.decode('utf-8', errors='ignore').strip()
-                print(f"[HLS] {cid}: {texto}", flush=True)
-                ultimo_log = agora
-
-    threading.Thread(target=_monitor_hls, args=(proc, camera_id), daemon=True).start()
-
-def parar_hls(camera_id: str):
-    if camera_id in _hls_processos:
-        try: _hls_processos[camera_id].kill()
-        except: pass
-        del _hls_processos[camera_id]
-
 
 def get_supabase():
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
@@ -447,7 +400,6 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
 def iniciar_captura_continua(camera_id: str, rtsp_url: str):
     if _captura_status.get(camera_id, {}).get("rodando"): return
     _captura_status[camera_id] = {"rodando": True}
-    threading.Thread(target=iniciar_hls, args=(camera_id, rtsp_url), daemon=True).start()
     threading.Thread(target=_thread_captura_continua, args=(camera_id, rtsp_url), daemon=True).start()
 
 
@@ -1030,13 +982,6 @@ def main():
             time.sleep(60)
             vivas = sum(1 for t in threads if t.is_alive())
             print(f"Status: {vivas}/{len(threads)} cameras ativas", flush=True)
-            # Watchdog — reinicia HLS de cameras que perderam conexao
-            for camera in cameras:
-                cid = camera['id']
-                proc = _hls_processos.get(cid)
-                if proc is None or proc.poll() is not None:
-                    print(f"[WATCHDOG] Reiniciando HLS {camera['nome']}", flush=True)
-                    threading.Thread(target=iniciar_hls, args=(cid, camera['rtsp_url']), daemon=True).start()
     except KeyboardInterrupt:
         print("Worker encerrado.")
 
