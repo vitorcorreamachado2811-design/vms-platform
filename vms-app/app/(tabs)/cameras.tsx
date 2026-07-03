@@ -3,50 +3,82 @@ import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, Modal, SafeAreaView, ActivityIndicator,
 } from "react-native"
-import Video from "react-native-video"
+import { WebView } from "react-native-webview"
 import { useAuth } from "../../src/AuthContext"
 
 const API = "https://vms-platform-production.up.railway.app"
-// TCP Proxy dedicado (nao o dominio HTTP publico do Railway): o MediaMTX
-// vincula cada sessao HLS ao IP do cliente na 1a requisicao (index.m3u8) e
-// exige o mesmo IP nas seguintes (playlist de midia, segmentos). Atras do
-// dominio HTTP publico (camada 7, edge do Railway) esse IP nao e estavel
-// entre requisicoes e a sessao cai com 401. Via TCP Proxy (camada 4) o
-// MediaMTX sempre ve o IP do relay (hls-relay/), que e fixo.
-const MEDIAMTX_URL = "http://hayabusa.proxy.rlwy.net:15557"
 
 interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; empresa_id: string }
 
+// WHEP (WebRTC) direto no WebView: o MediaMTX ja recebe publish continuo
+// de cada camera ativa via worker.py, entao a stream ja esta disponivel -
+// so trocamos SDP offer/answer com o backend (que repassa pro MediaMTX
+// com o token de leitura). Evita os problemas do RTSP/HLS nativos
+// (ExoPlayer incompativel com SDP do MediaMTX, sessao HLS presa a IP e
+// com timeout de 30s fixo no MediaMTX).
+function webrtcHtml(webrtcUrl: string) {
+  return `<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></head>
+<body style="margin:0;background:#000;overflow:hidden">
+<video id="v" autoplay playsinline muted style="width:100vw;height:100vh;object-fit:contain;background:#000"></video>
+<script>
+var pc = null;
+var video = document.getElementById('v');
+function post(status) {
+  window.ReactNativeWebView.postMessage(status);
+}
+async function conectar() {
+  post('conectando');
+  try {
+    if (pc) { pc.close(); }
+    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pc.ontrack = function(evt) {
+      if (evt.streams[0]) {
+        video.srcObject = evt.streams[0];
+        video.play().then(function() { post('ao_vivo'); }).catch(function() {});
+      }
+    };
+    pc.oniceconnectionstatechange = function() {
+      var s = pc.iceConnectionState;
+      if (s === 'failed' || s === 'disconnected' || s === 'closed') {
+        post('sem_sinal');
+        setTimeout(conectar, 3000);
+      }
+    };
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+    var offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await new Promise(function(resolve) {
+      if (pc.iceGatheringState === 'complete') { resolve(); return; }
+      pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === 'complete') resolve(); };
+      setTimeout(resolve, 2000);
+    });
+    var res = await fetch(${JSON.stringify(webrtcUrl)}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: pc.localDescription.sdp,
+    });
+    if (!res.ok) throw new Error('backend ' + res.status);
+    var answerSdp = await res.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+  } catch (e) {
+    post('sem_sinal');
+    setTimeout(conectar, 3000);
+  }
+}
+conectar();
+</script>
+</body></html>`
+}
+
 function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const { usuario, token } = useAuth()
-  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<"conectando" | "ao_vivo" | "sem_sinal">("conectando")
-  const reconectarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  async function buscarToken() {
-    if (!usuario || !token) return
-    try {
-      const res = await fetch(
-        `${API}/cameras/${camera.id}/hls-token?usuario_id=${usuario.id}&token=${token}`
-      )
-      if (!res.ok) { setStatus("sem_sinal"); agendarReconexao(); return }
-      const data = await res.json()
-      setHlsUrl(`${MEDIAMTX_URL}/${camera.id}/index.m3u8?user=viewer&pass=${data.token}`)
-    } catch {
-      setStatus("sem_sinal")
-      agendarReconexao()
-    }
-  }
+  if (!usuario || !token) return null
 
-  function agendarReconexao() {
-    if (reconectarRef.current) clearTimeout(reconectarRef.current)
-    reconectarRef.current = setTimeout(buscarToken, 3000)
-  }
-
-  useEffect(() => {
-    buscarToken()
-    return () => { if (reconectarRef.current) clearTimeout(reconectarRef.current) }
-  }, [camera.id, usuario, token])
+  const webrtcUrl = `${API}/cameras/${camera.id}/webrtc?usuario_id=${usuario.id}&token=${token}`
 
   return (
     <Modal animationType="slide" statusBarTranslucent>
@@ -61,17 +93,16 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
           </TouchableOpacity>
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          {hlsUrl && (
-            <Video
-              style={{ width: "100%", height: "100%" }}
-              source={{ uri: hlsUrl }}
-              resizeMode="contain"
-              onLoad={() => setStatus("ao_vivo")}
-              onBuffer={({ isBuffering }) => setStatus(isBuffering ? "conectando" : "ao_vivo")}
-              onError={() => { setStatus("sem_sinal"); agendarReconexao() }}
-              onEnd={() => { setStatus("sem_sinal"); agendarReconexao() }}
-            />
-          )}
+          <WebView
+            style={{ width: "100%", height: "100%", backgroundColor: "#000" }}
+            source={{ html: webrtcHtml(webrtcUrl) }}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled
+            domStorageEnabled
+            originWhitelist={["*"]}
+            onMessage={(e) => setStatus(e.nativeEvent.data as any)}
+          />
           {status !== "ao_vivo" && (
             <View style={mv.overlay} pointerEvents="none">
               <ActivityIndicator color="#3b82f6" size="large" />
