@@ -26,12 +26,11 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "react-native-vlc-media-player",
       [
-        "expo-build-properties",
+        "react-native-video",
         {
-          "android": {
-            "minSdkVersion": 26
+          "androidExtensions": {
+            "useExoplayerRtsp": true
           }
         }
       ]

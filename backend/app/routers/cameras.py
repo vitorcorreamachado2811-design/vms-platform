@@ -296,12 +296,12 @@ def obter_rtsp_token(camera_id: UUID, usuario_id: str, token: str, db: Session =
         raise HTTPException(status_code=503, detail="RTSP publico nao configurado (MEDIAMTX_PUBLIC_RTSP_HOST ausente)")
 
     rtsp_token = gerar_rtsp_token(str(camera_id))
-    # URL sem credenciais embutidas: o libVLC do react-native-vlc-media-player
-    # no Android nao lida bem com user:pass@host nem com query string na URI
-    # RTSP. O app passa usuario/senha via mediaOptions (--rtsp-user/--rtsp-pwd),
-    # opcoes nativas do libVLC, usando o token devolvido aqui separadamente.
-    rtsp_url = f"rtsp://{MEDIAMTX_PUBLIC_RTSP_HOST}/{camera_id}"
-    return {"rtsp_url": rtsp_url, "token": rtsp_token, "expira_em_segundos": RTSP_TOKEN_TTL_SEGUNDOS}
+    # Credenciais embutidas na URI (user:pass@host): o ExoPlayer (via
+    # react-native-video, useExoplayerRtsp) suporta Basic/Digest RTSP nesse
+    # formato de forma nativa e documentada - diferente do libVLC usado
+    # anteriormente, que nao autenticava de jeito nenhum nessa versao.
+    rtsp_url = f"rtsp://viewer:{rtsp_token}@{MEDIAMTX_PUBLIC_RTSP_HOST}/{camera_id}"
+    return {"rtsp_url": rtsp_url, "expira_em_segundos": RTSP_TOKEN_TTL_SEGUNDOS}
 
 
 @router.get("/{camera_id}/hls-token")

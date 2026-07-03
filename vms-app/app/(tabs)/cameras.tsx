@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, Modal, SafeAreaView, ActivityIndicator,
 } from "react-native"
-import { VLCPlayer } from "react-native-vlc-media-player"
+import Video from "react-native-video"
 import { useAuth } from "../../src/AuthContext"
 
 const API = "https://vms-platform-production.up.railway.app"
@@ -13,7 +13,6 @@ interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; e
 function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const { usuario, token } = useAuth()
   const [rtspUrl, setRtspUrl] = useState<string | null>(null)
-  const [rtspToken, setRtspToken] = useState<string | null>(null)
   const [status, setStatus] = useState<"conectando" | "ao_vivo" | "sem_sinal">("conectando")
   const reconectarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -26,7 +25,6 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
       if (!res.ok) { setStatus("sem_sinal"); agendarReconexao(); return }
       const data = await res.json()
       setRtspUrl(data.rtsp_url)
-      setRtspToken(data.token)
     } catch {
       setStatus("sem_sinal")
       agendarReconexao()
@@ -56,28 +54,15 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
           </TouchableOpacity>
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          {rtspUrl && rtspToken && (
-            <VLCPlayer
+          {rtspUrl && (
+            <Video
               style={{ width: "100%", height: "100%" }}
-              autoplay
+              source={{ uri: rtspUrl }}
               resizeMode="contain"
-              source={{
-                uri: rtspUrl,
-                // mediaOptions nao esta no tipo oficial da lib. --rtsp-tcp forca
-                // midia via TCP (o proxy do Railway nao aceita UDP). O libVLC pede
-                // credenciais via um LoginDialog nativo em vez de aceitar --rtsp-user/
-                // --rtsp-pwd direto - patch em node_modules (ver patches/) responde
-                // esse dialog usando o user/pass extraidos daqui.
-                mediaOptions: [
-                  "--rtsp-tcp",
-                  "--rtsp-user=viewer",
-                  `--rtsp-pwd=${rtspToken}`,
-                ],
-              } as any}
-              onPlaying={() => setStatus("ao_vivo")}
-              onBuffering={() => setStatus("conectando")}
+              onLoad={() => setStatus("ao_vivo")}
+              onBuffer={({ isBuffering }) => setStatus(isBuffering ? "conectando" : "ao_vivo")}
               onError={() => { setStatus("sem_sinal"); agendarReconexao() }}
-              onStopped={() => { setStatus("sem_sinal"); agendarReconexao() }}
+              onEnd={() => { setStatus("sem_sinal"); agendarReconexao() }}
             />
           )}
           {status !== "ao_vivo" && (
