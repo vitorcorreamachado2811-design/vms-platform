@@ -7,12 +7,13 @@ import Video from "react-native-video"
 import { useAuth } from "../../src/AuthContext"
 
 const API = "https://vms-platform-production.up.railway.app"
+const MEDIAMTX_URL = "https://wonderful-laughter-production-5858.up.railway.app"
 
 interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; empresa_id: string }
 
 function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const { usuario, token } = useAuth()
-  const [rtspUrl, setRtspUrl] = useState<string | null>(null)
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<"conectando" | "ao_vivo" | "sem_sinal">("conectando")
   const reconectarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -20,11 +21,11 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
     if (!usuario || !token) return
     try {
       const res = await fetch(
-        `${API}/cameras/${camera.id}/rtsp-token?usuario_id=${usuario.id}&token=${token}`
+        `${API}/cameras/${camera.id}/hls-token?usuario_id=${usuario.id}&token=${token}`
       )
       if (!res.ok) { setStatus("sem_sinal"); agendarReconexao(); return }
       const data = await res.json()
-      setRtspUrl(data.rtsp_url)
+      setHlsUrl(`${MEDIAMTX_URL}/${camera.id}/index.m3u8?user=viewer&pass=${data.token}`)
     } catch {
       setStatus("sem_sinal")
       agendarReconexao()
@@ -54,10 +55,10 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
           </TouchableOpacity>
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          {rtspUrl && (
+          {hlsUrl && (
             <Video
               style={{ width: "100%", height: "100%" }}
-              source={{ uri: rtspUrl, type: "rtsp" }}
+              source={{ uri: hlsUrl }}
               resizeMode="contain"
               onLoad={() => setStatus("ao_vivo")}
               onBuffer={({ isBuffering }) => setStatus(isBuffering ? "conectando" : "ao_vivo")}
