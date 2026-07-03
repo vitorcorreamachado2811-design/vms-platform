@@ -7,7 +7,13 @@ import Video from "react-native-video"
 import { useAuth } from "../../src/AuthContext"
 
 const API = "https://vms-platform-production.up.railway.app"
-const MEDIAMTX_URL = "https://wonderful-laughter-production-5858.up.railway.app"
+// TCP Proxy dedicado (nao o dominio HTTP publico do Railway): o MediaMTX
+// vincula cada sessao HLS ao IP do cliente na 1a requisicao (index.m3u8) e
+// exige o mesmo IP nas seguintes (playlist de midia, segmentos). Atras do
+// dominio HTTP publico (camada 7, edge do Railway) esse IP nao e estavel
+// entre requisicoes e a sessao cai com 401. Via TCP Proxy (camada 4) o
+// MediaMTX sempre ve o IP do relay (hls-relay/), que e fixo.
+const MEDIAMTX_URL = "http://hayabusa.proxy.rlwy.net:15557"
 
 interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; empresa_id: string }
 

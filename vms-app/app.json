@@ -26,7 +26,15 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "react-native-video"
+      "react-native-video",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "scheme": "vmsplatform",
     "experiments": {
