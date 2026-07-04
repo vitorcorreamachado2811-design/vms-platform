@@ -552,90 +552,6 @@ def analisar_nivel_freezer(frame, camera_id: str, empresa_id: str, regioes=None)
 # DETECCAO DE CEDULAS NO CAIXA
 # ---------------------------------------------------------
 # Cedulas brasileiras por faixa de cor HSV
-CEDULAS_HSV = [
-    ((100, 130, 80, 80),   2),
-    ((130, 160, 60, 60),   5),
-    ((0,   15, 100, 80),  10),
-    ((15,  35, 120, 100), 20),
-    ((10,  25, 150, 100), 50),
-    ((95, 115, 80, 120),  100),
-    ((35,  75, 40, 80),   200),
-]
-
-_ultimo_caixa: dict = {}
-CAIXA_COOLDOWN = 5
-
-
-def detectar_cedula_por_cor(frame):
-    h, w = frame.shape[:2]
-    roi = frame[h//4:3*h//4, w//4:3*w//4]
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    melhor_valor = None
-    melhor_score = 0
-    for (h_min, h_max, s_min, v_min), valor in CEDULAS_HSV:
-        mask  = cv2.inRange(hsv, np.array([h_min, s_min, v_min]), np.array([h_max, 255, 255]))
-        score = cv2.countNonZero(mask)
-        total = roi.shape[0] * roi.shape[1]
-        pct   = score / total
-        if pct > 0.15 and score > melhor_score:
-            melhor_score = score
-            melhor_valor = valor
-    return melhor_valor
-
-
-def detectar_maos_no_frame(results) -> bool:
-    for result in results:
-        if result.keypoints is None: continue
-        for kps in result.keypoints.data:
-            kps = kps.cpu().numpy()
-            if len(kps) > 10 and (kps[9][2] > 0.3 or kps[10][2] > 0.3):
-                return True
-    return False
-
-
-def processar_caixa(frame, results, camera_id: str, empresa_id: str):
-    agora = time.time()
-    if agora - _ultimo_caixa.get(camera_id, 0) < CAIXA_COOLDOWN:
-        return
-    if not detectar_maos_no_frame(results):
-        return
-    cedula = detectar_cedula_por_cor(frame)
-    if cedula is None:
-        return
-    try:
-        resp = requests.get(f"{API_BASE}/caixa/leitura/{empresa_id}", timeout=2)
-        if resp.status_code != 200: return
-        leitura = resp.json()
-        valor_balanca = leitura.get("valor_balanca", 0)
-        if valor_balanca <= 0: return
-    except: return
-
-    if cedula < valor_balanca: return
-
-    _ultimo_caixa[camera_id] = agora
-    troco_esperado = cedula - valor_balanca
-    print(f"[CAIXA] Venda: R${valor_balanca:.2f} | Cedula: R${cedula:.2f} | Troco: R${troco_esperado:.2f}", flush=True)
-
-    time.sleep(3)
-    frame2 = get_frame_atual(camera_id)
-    troco_detectado = None
-    if frame2 is not None:
-        troco_detectado = detectar_cedula_por_cor(frame2)
-
-    try:
-        requests.post(f"{API_BASE}/caixa/venda", json={
-            "empresa_id": empresa_id,
-            "camera_id": camera_id,
-            "valor_balanca": valor_balanca,
-            "cedula_recebida": cedula,
-            "troco_calculado": troco_esperado,
-            "troco_detectado": troco_detectado,
-            "peso_gramas": leitura.get("peso_gramas"),
-        }, timeout=5)
-    except Exception as e:
-        print(f"[CAIXA] Erro registrar venda: {e}", flush=True)
-
-
 # ---------------------------------------------------------
 # DETECCAO DE COMPORTAMENTO SUSPEITO NO CAIXA
 # ---------------------------------------------------------
@@ -824,9 +740,6 @@ def processar_camera(camera):
             if analiticos.get("freezer", False):
                 analisar_nivel_freezer(frame, camera_id, empresa_id, regioes)
 
-            if analiticos.get("caixa", False):
-                processar_caixa(frame, results, camera_id, empresa_id)
-
             if analiticos.get("copos", False):
                 contar_copos_potes(frame, camera_id, nome, copos_regiao)
 
@@ -868,7 +781,7 @@ def processar_camera(camera):
                     def pode_alertar(tipo): return agora - cooldowns[tid][tipo] > COOLDOWN_SEGUNDOS
                     def analitico_ativo(key): return analiticos.get(key, False)
 
-                    if caixa_regiao and analitico_ativo("habitos"):
+                    if caixa_regiao and analitico_ativo("caixa"):
                         detectar_comportamento_suspeito(
                             tid, det["kps"], caixa_regiao, w, h, agora_dt, agora,
                             camera_id, empresa_id, nome, rtsp_url, det["conf"], cooldowns
