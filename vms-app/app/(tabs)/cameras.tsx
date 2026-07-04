@@ -23,12 +23,23 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
   const [streamURL, setStreamURL] = useState<string | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const reconectarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ativoRef = useRef(true)
+  // Cada chamada de conectar() ganha um numero de geracao. Callbacks
+  // assincronos (setRemoteDescription, etc) so agem se a sua geracao ainda
+  // for a atual - evita fechar/mexer numa PeerConnection que ja foi
+  // substituida por uma tentativa mais nova (o modulo nativo do WebRTC
+  // crasha com NPE se setRemoteDescription resolve depois do close() da
+  // mesma conexao).
+  const geracaoRef = useRef(0)
 
   if (!usuario || !token) return null
 
   async function conectar() {
     if (!ativoRef.current) return
+    const minhaGeracao = ++geracaoRef.current
+    if (reconectarRef.current) { clearTimeout(reconectarRef.current); reconectarRef.current = null }
+    if (disconnectTimerRef.current) { clearTimeout(disconnectTimerRef.current); disconnectTimerRef.current = null }
     setStatus("conectando")
     try {
       if (pcRef.current) pcRef.current.close()
@@ -38,43 +49,60 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
       pcRef.current = pc
 
       pc.addEventListener("track", (evt: any) => {
+        if (geracaoRef.current !== minhaGeracao) return
         stream.addTrack(evt.track)
         setStreamURL(stream.toURL())
         setStatus("ao_vivo")
       })
       pc.addEventListener("iceconnectionstatechange", () => {
+        if (geracaoRef.current !== minhaGeracao) return
         const s = pc.iceConnectionState
-        if (s === "failed" || s === "disconnected" || s === "closed") {
-          agendarReconexao()
+        if (s === "connected" || s === "completed") {
+          if (disconnectTimerRef.current) { clearTimeout(disconnectTimerRef.current); disconnectTimerRef.current = null }
+        } else if (s === "failed" || s === "closed") {
+          agendarReconexao(minhaGeracao)
+        } else if (s === "disconnected") {
+          // "disconnected" costuma ser transitorio durante o
+          // estabelecimento normal da conexao - so trata como queda de
+          // verdade se persistir por alguns segundos.
+          if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current)
+          disconnectTimerRef.current = setTimeout(() => {
+            if (geracaoRef.current === minhaGeracao) agendarReconexao(minhaGeracao)
+          }, 4000)
         }
       })
       pc.addTransceiver("video", { direction: "recvonly" })
       pc.addTransceiver("audio", { direction: "recvonly" })
 
       const offer = await pc.createOffer({})
+      if (geracaoRef.current !== minhaGeracao) return
       await pc.setLocalDescription(offer)
+      if (geracaoRef.current !== minhaGeracao) return
       await new Promise<void>((resolve) => {
         if (pc.iceGatheringState === "complete") { resolve(); return }
         const check = () => { if (pc.iceGatheringState === "complete") { resolve() } }
         pc.addEventListener("icegatheringstatechange", check)
         setTimeout(resolve, 2000)
       })
+      if (geracaoRef.current !== minhaGeracao) return
 
       const res = await fetch(`${API}/cameras/${camera.id}/webrtc?usuario_id=${usuario!.id}&token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/sdp" },
         body: pc.localDescription?.sdp,
       })
+      if (geracaoRef.current !== minhaGeracao) return
       if (!res.ok) throw new Error(`backend ${res.status}`)
       const answerSdp = await res.text()
+      if (geracaoRef.current !== minhaGeracao) return
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp })
     } catch {
-      agendarReconexao()
+      if (geracaoRef.current === minhaGeracao) agendarReconexao(minhaGeracao)
     }
   }
 
-  function agendarReconexao() {
-    if (!ativoRef.current) return
+  function agendarReconexao(geracao: number) {
+    if (!ativoRef.current || geracaoRef.current !== geracao) return
     setStatus("sem_sinal")
     if (reconectarRef.current) clearTimeout(reconectarRef.current)
     reconectarRef.current = setTimeout(conectar, 3000)
@@ -85,7 +113,9 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
     conectar()
     return () => {
       ativoRef.current = false
+      geracaoRef.current++
       if (reconectarRef.current) clearTimeout(reconectarRef.current)
+      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current)
       if (pcRef.current) pcRef.current.close()
     }
   }, [camera.id])
