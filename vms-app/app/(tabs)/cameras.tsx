@@ -1,94 +1,94 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, Modal, SafeAreaView, ActivityIndicator,
 } from "react-native"
-import { WebView } from "react-native-webview"
+import { RTCPeerConnection, RTCView, MediaStream } from "react-native-webrtc"
 import { useAuth } from "../../src/AuthContext"
 
 const API = "https://vms-platform-production.up.railway.app"
 
 interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; empresa_id: string }
 
-// WHEP (WebRTC) direto no WebView: o MediaMTX ja recebe publish continuo
-// de cada camera ativa via worker.py, entao a stream ja esta disponivel -
-// so trocamos SDP offer/answer com o backend (que repassa pro MediaMTX
-// com o token de leitura). Evita os problemas do RTSP/HLS nativos
-// (ExoPlayer incompativel com SDP do MediaMTX, sessao HLS presa a IP e
-// com timeout de 30s fixo no MediaMTX).
-function webrtcHtml(webrtcUrl: string) {
-  return `<!DOCTYPE html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></head>
-<body style="margin:0;background:#000;overflow:hidden">
-<video id="v" autoplay playsinline muted style="width:100vw;height:100vh;object-fit:contain;background:#000"></video>
-<script>
-var pc = null;
-var video = document.getElementById('v');
-var stream = null;
-function post(status) {
-  window.ReactNativeWebView.postMessage(status);
-}
-async function conectar() {
-  post('conectando');
-  try {
-    if (pc) { pc.close(); }
-    stream = new MediaStream();
-    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    pc.ontrack = function(evt) {
-      // Nao confia em evt.streams[0] - o MediaMTX nao associa as tracks a
-      // um MediaStream (msid) de forma confiavel, entao montamos o nosso.
-      stream.addTrack(evt.track);
-      if (video.srcObject !== stream) {
-        video.srcObject = stream;
-        video.play().then(function() { post('ao_vivo'); }).catch(function() {});
-      }
-    };
-    pc.oniceconnectionstatechange = function() {
-      var s = pc.iceConnectionState;
-      if (s === 'failed' || s === 'disconnected' || s === 'closed') {
-        post('sem_sinal');
-        setTimeout(conectar, 3000);
-      }
-    };
-    pc.addTransceiver('video', { direction: 'recvonly' });
-    pc.addTransceiver('audio', { direction: 'recvonly' });
-    var offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await new Promise(function(resolve) {
-      if (pc.iceGatheringState === 'complete') { resolve(); return; }
-      pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === 'complete') resolve(); };
-      setTimeout(resolve, 2000);
-    });
-    var res = await fetch(${JSON.stringify(webrtcUrl)}, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
-      body: pc.localDescription.sdp,
-    });
-    if (!res.ok) throw new Error('backend ' + res.status);
-    var answerSdp = await res.text();
-    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
-  } catch (e) {
-    post('sem_sinal');
-    setTimeout(conectar, 3000);
-  }
-}
-conectar();
-</script>
-</body></html>`
-}
-
+// WHEP (WebRTC) nativo via react-native-webrtc: o MediaMTX ja recebe
+// publish continuo de cada camera ativa via worker.py, entao a stream ja
+// esta disponivel - so trocamos SDP offer/answer com o backend (que
+// repassa pro MediaMTX com o token de leitura). RTCView e uma view nativa
+// normal do RN (respeita ordem de camadas) - diferente de video dentro de
+// WebView, que no Android usa uma camada de overlay de hardware que cobre
+// qualquer outra coisa na tela.
 function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const { usuario, token } = useAuth()
   const [status, setStatus] = useState<"conectando" | "ao_vivo" | "sem_sinal">("conectando")
+  const [streamURL, setStreamURL] = useState<string | null>(null)
+  const pcRef = useRef<RTCPeerConnection | null>(null)
+  const reconectarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ativoRef = useRef(true)
 
   if (!usuario || !token) return null
 
-  const webrtcUrl = `${API}/cameras/${camera.id}/webrtc?usuario_id=${usuario.id}&token=${token}`
-  // O source do WebView precisa manter a MESMA referencia entre re-renders
-  // (setStatus() re-renderiza o componente toda hora) - um objeto novo a
-  // cada render faz o WebView recarregar do zero, derrubando a conexao
-  // WebRTC que tinha acabado de conectar.
-  const webviewSource = useMemo(() => ({ html: webrtcHtml(webrtcUrl) }), [webrtcUrl])
+  async function conectar() {
+    if (!ativoRef.current) return
+    setStatus("conectando")
+    try {
+      if (pcRef.current) pcRef.current.close()
+      const stream = new MediaStream()
+      setStreamURL(null)
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }) as any
+      pcRef.current = pc
+
+      pc.addEventListener("track", (evt: any) => {
+        stream.addTrack(evt.track)
+        setStreamURL(stream.toURL())
+        setStatus("ao_vivo")
+      })
+      pc.addEventListener("iceconnectionstatechange", () => {
+        const s = pc.iceConnectionState
+        if (s === "failed" || s === "disconnected" || s === "closed") {
+          agendarReconexao()
+        }
+      })
+      pc.addTransceiver("video", { direction: "recvonly" })
+      pc.addTransceiver("audio", { direction: "recvonly" })
+
+      const offer = await pc.createOffer({})
+      await pc.setLocalDescription(offer)
+      await new Promise<void>((resolve) => {
+        if (pc.iceGatheringState === "complete") { resolve(); return }
+        const check = () => { if (pc.iceGatheringState === "complete") { resolve() } }
+        pc.addEventListener("icegatheringstatechange", check)
+        setTimeout(resolve, 2000)
+      })
+
+      const res = await fetch(`${API}/cameras/${camera.id}/webrtc?usuario_id=${usuario!.id}&token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: pc.localDescription?.sdp,
+      })
+      if (!res.ok) throw new Error(`backend ${res.status}`)
+      const answerSdp = await res.text()
+      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp })
+    } catch {
+      agendarReconexao()
+    }
+  }
+
+  function agendarReconexao() {
+    if (!ativoRef.current) return
+    setStatus("sem_sinal")
+    if (reconectarRef.current) clearTimeout(reconectarRef.current)
+    reconectarRef.current = setTimeout(conectar, 3000)
+  }
+
+  useEffect(() => {
+    ativoRef.current = true
+    conectar()
+    return () => {
+      ativoRef.current = false
+      if (reconectarRef.current) clearTimeout(reconectarRef.current)
+      if (pcRef.current) pcRef.current.close()
+    }
+  }, [camera.id])
 
   return (
     <Modal animationType="slide" statusBarTranslucent onRequestClose={onClose}>
@@ -103,16 +103,13 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
           </TouchableOpacity>
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <WebView
-            style={{ width: "100%", height: "100%", backgroundColor: "#000" }}
-            source={webviewSource}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            javaScriptEnabled
-            domStorageEnabled
-            originWhitelist={["*"]}
-            onMessage={(e) => setStatus(e.nativeEvent.data as any)}
-          />
+          {streamURL && (
+            <RTCView
+              streamURL={streamURL}
+              style={{ width: "100%", height: "100%" }}
+              objectFit="contain"
+            />
+          )}
           {status !== "ao_vivo" && (
             <View style={mv.overlay} pointerEvents="none">
               <ActivityIndicator color="#3b82f6" size="large" />
@@ -207,13 +204,10 @@ const s = StyleSheet.create({
 })
 
 const mv = StyleSheet.create({
-  // elevation/zIndex: o video do WebRTC dentro do WebView usa uma camada de
-  // overlay de hardware que ignora a ordem normal de empilhamento das views
-  // no Android - sem isso o video renderiza por cima do cabecalho.
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827", elevation: 10, zIndex: 10 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827" },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e" },
   nome: { color: "#fff", fontWeight: "700", fontSize: 15 },
   closeBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
-  overlay: { position: "absolute", alignItems: "center", justifyContent: "center", gap: 10 },
+  overlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 10 },
   overlayTexto: { color: "#9ca3af", fontSize: 13 },
 })
