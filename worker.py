@@ -378,6 +378,18 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                     texto = linha.decode('utf-8', errors='ignore').strip()
                     if texto:
                         print(f"[CAPTURA-ERR] {cid}: {texto}", flush=True)
+                        # A saida RTMP (pro MediaMTX) e um 2o output do MESMO
+                        # processo ffmpeg que tambem gera o MJPEG usado pela
+                        # captura/analitico. Quando so o RTMP quebra (pipe
+                        # fechado pelo MediaMTX), o ffmpeg segue rodando pro
+                        # lado MJPEG - a camera continua "ativa" pro worker,
+                        # mas o publish fica morto ate o processo cair por
+                        # outro motivo qualquer, o que podia levar minutos.
+                        # Forcar o restart aqui reconecta os dois lados juntos
+                        # em poucos segundos.
+                        if "Broken pipe" in texto and p.poll() is None:
+                            print(f"[CAPTURA] {cid}: saida RTMP quebrou, reiniciando conexao", flush=True)
+                            p.kill()
             threading.Thread(target=_drenar_stderr_captura, args=(proc, camera_id), daemon=True).start()
 
             buffer = b""
