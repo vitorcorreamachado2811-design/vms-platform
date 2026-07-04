@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, Modal, SafeAreaView, ActivityIndicator,
+  StyleSheet, Modal, SafeAreaView, ActivityIndicator, StatusBar, Platform,
 } from "react-native"
 import { RTCPeerConnection, RTCView, MediaStream } from "react-native-webrtc"
 import { useAuth } from "../../src/AuthContext"
@@ -91,7 +91,7 @@ function RtspViewer({ camera, onClose }: { camera: Camera; onClose: () => void }
   }, [camera.id])
 
   return (
-    <Modal animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+    <Modal animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
         <View style={mv.header}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -204,7 +204,11 @@ const s = StyleSheet.create({
 })
 
 const mv = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827" },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827",
+    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 24 : 0) + 12,
+  },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e" },
   nome: { color: "#fff", fontWeight: "700", fontSize: 15 },
   closeBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
