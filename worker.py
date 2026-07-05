@@ -89,10 +89,66 @@ def agendar_publish(camera_id: str, frame):
 
 MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
 MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
+MEDIAMTX_HOSTNAME = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
+MEDIAMTX_API = f"http://{MEDIAMTX_HOSTNAME}:9997"
 
 def _destino_publish_rtmp(camera_id: str) -> str:
-    hostname = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
-    return f"rtmp://{hostname}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
+    return f"rtmp://{MEDIAMTX_HOSTNAME}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
+
+
+# Processo ffmpeg atual de cada camera, pro watchdog de publish poder matar
+# e forcar reconexao quando o MediaMTX fica sem publisher nesse path.
+_proc_atual: dict = {}
+_proc_lock = threading.Lock()
+
+def mediamtx_tem_publisher(camera_id: str):
+    """True/False se o MediaMTX tem (ou nao) um publisher ativo nesse path
+    agora. None se nao deu pra saber (API do MediaMTX fora do ar/timeout) -
+    nesse caso o watchdog nao deve agir, pra nao reiniciar por engano."""
+    try:
+        resp = requests.get(f"{MEDIAMTX_API}/v3/paths/get/{camera_id}", timeout=5)
+        if resp.status_code == 404:
+            return False
+        if resp.status_code != 200:
+            return None
+        return bool(resp.json().get("available"))
+    except Exception:
+        return None
+
+
+WATCHDOG_INTERVALO = 30
+WATCHDOG_FALHAS_PARA_REINICIAR = 2  # ~60s sem publisher antes de forcar restart
+
+def thread_watchdog_publish():
+    """Verifica direto na API do MediaMTX (fonte da verdade) se cada camera
+    ainda tem publish ativo. Cobre qualquer causa de travamento silencioso
+    da saida RTMP (nao so o "Broken pipe" ja tratado no dreno do stderr) -
+    sem isso, uma camera podia ficar sem "Ao Vivo" indefinidamente ate
+    alguem reiniciar o worker manualmente."""
+    if not MEDIAMTX_PUBLISH_SECRET:
+        return
+    falhas: dict = {}
+    time.sleep(WATCHDOG_INTERVALO)
+    while True:
+        with _proc_lock:
+            camera_ids = list(_proc_atual.keys())
+        for camera_id in camera_ids:
+            status = mediamtx_tem_publisher(camera_id)
+            if status is None:
+                continue
+            if status:
+                falhas[camera_id] = 0
+                continue
+            falhas[camera_id] = falhas.get(camera_id, 0) + 1
+            if falhas[camera_id] >= WATCHDOG_FALHAS_PARA_REINICIAR:
+                falhas[camera_id] = 0
+                with _proc_lock:
+                    proc = _proc_atual.get(camera_id)
+                if proc and proc.poll() is None:
+                    print(f"[WATCHDOG] {camera_id}: sem publisher no MediaMTX ha "
+                          f"~{WATCHDOG_INTERVALO * WATCHDOG_FALHAS_PARA_REINICIAR}s, reiniciando", flush=True)
+                    proc.kill()
+        time.sleep(WATCHDOG_INTERVALO)
 
 
 def get_supabase():
@@ -368,6 +424,8 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                     "-f", "flv", _destino_publish_rtmp(camera_id),
                 ]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            with _proc_lock:
+                _proc_atual[camera_id] = proc
             print(f"[CAPTURA] Conexao RTSP aberta {camera_id} @ {FPS_BUFFER}fps", flush=True)
 
             def _drenar_stderr_captura(p, cid):
@@ -907,6 +965,7 @@ def main():
             time.sleep(5)
 
     threading.Thread(target=thread_verificacao_habitos, daemon=True).start()
+    threading.Thread(target=thread_watchdog_publish, daemon=True).start()
 
     threads = []
     for camera in cameras:
