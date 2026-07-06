@@ -90,7 +90,12 @@ def agendar_publish(camera_id: str, frame):
 MEDIAMTX_RTSP = os.environ.get("MEDIAMTX_RTSP_URL", "rtsp://wonderful-laughter.railway.internal:8554")
 MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
 MEDIAMTX_HOSTNAME = MEDIAMTX_RTSP.replace("rtsp://", "").split(":")[0]
-MEDIAMTX_API = f"http://{MEDIAMTX_HOSTNAME}:9997"
+# A API real do MediaMTX (9997) fica só em loopback na VPS - sem autenticação
+# nenhuma (authHTTPExclude: action: api), nunca pode ficar exposta direto pra
+# internet. O watchdog fala com um proxy pequeno (mediamtx_api_proxy.py, porta
+# 9998) que exige um header X-Auth antes de repassar a chamada pra 9997 local.
+MEDIAMTX_API = f"http://{MEDIAMTX_HOSTNAME}:9998"
+MEDIAMTX_API_SECRET = os.environ.get("MEDIAMTX_API_SECRET", "")
 
 def _destino_publish_rtmp(camera_id: str) -> str:
     return f"rtmp://{MEDIAMTX_HOSTNAME}:1935/{camera_id}?user=publisher&pass={MEDIAMTX_PUBLISH_SECRET}"
@@ -106,7 +111,11 @@ def mediamtx_tem_publisher(camera_id: str):
     agora. None se nao deu pra saber (API do MediaMTX fora do ar/timeout) -
     nesse caso o watchdog nao deve agir, pra nao reiniciar por engano."""
     try:
-        resp = requests.get(f"{MEDIAMTX_API}/v3/paths/get/{camera_id}", timeout=5)
+        resp = requests.get(
+            f"{MEDIAMTX_API}/v3/paths/get/{camera_id}",
+            headers={"X-Auth": MEDIAMTX_API_SECRET},
+            timeout=5,
+        )
         if resp.status_code == 404:
             return False
         if resp.status_code != 200:
