@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { HLSPlayer } from '../../components/HLSPlayer'
+import { WebRTCPlayer } from '../../components/WebRTCPlayer'
 import { DashboardAoVivo } from '../../components/DashboardAoVivo'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
@@ -674,7 +674,7 @@ function CameraPlayer({ camera, cameraAoVivoId, setCameraAoVivoId, onCameraAtual
         <ModalEditar camera={camera} onClose={() => setShowEditar(false)} onSalvo={onCameraAtualizada} />
       )}
       {aoVivo && (
-        <HLSPlayer cameraId={camera.id} cameraName={camera.nome} onClose={() => setCameraAoVivoId(null)} />
+        <WebRTCPlayer cameraId={camera.id} cameraName={camera.nome} onClose={() => setCameraAoVivoId(null)} />
       )}
 
       <div className="bg-gray-800 rounded-xl overflow-hidden shadow-lg">

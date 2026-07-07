@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -30,21 +30,12 @@ export default function EventosPage() {
   const [cameraSelecionada, setCameraSelecionada] = useState<string>('todas')
   const [videoAberto, setVideoAberto] = useState<string | null>(null) // ← NOVO
 
-  useEffect(() => {
-    if (!authCarregando) carregarDados()
-  }, [authCarregando])
-
-  useEffect(() => {
-    if (!autoRefresh) return
-    const interval = setInterval(carregarEventos, 3000)
-    return () => clearInterval(interval)
-  }, [autoRefresh])
-
-  async function carregarDados() {
+  const carregarDados = useCallback(async () => {
+    if (!usuario) return
     try {
       const [e, c] = await Promise.all([
-        fetch(`${API}/eventos/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
-        fetch(`${API}/cameras/?empresa_id=${usuario?.empresa_id}`).then(r => r.json()),
+        fetch(`${API}/eventos/?empresa_id=${usuario.empresa_id}`).then(r => r.json()),
+        fetch(`${API}/cameras/?empresa_id=${usuario.empresa_id}`).then(r => r.json()),
       ])
       setEventos(Array.isArray(e) ? e : [])
       setCameras(Array.isArray(c) ? c : [])
@@ -54,14 +45,25 @@ export default function EventosPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [usuario])
 
-  async function carregarEventos() {
+  const carregarEventos = useCallback(async () => {
+    if (!usuario) return
     try {
-      const data = await fetch(`${API}/eventos/?empresa_id=${usuario?.empresa_id}`).then(r => r.json())
+      const data = await fetch(`${API}/eventos/?empresa_id=${usuario.empresa_id}`).then(r => r.json())
       setEventos(Array.isArray(data) ? data : [])
     } catch {}
-  }
+  }, [usuario])
+
+  useEffect(() => {
+    if (!authCarregando) carregarDados()
+  }, [authCarregando, carregarDados])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(carregarEventos, 3000)
+    return () => clearInterval(interval)
+  }, [autoRefresh, carregarEventos])
 
   if (authCarregando) {
     return (
