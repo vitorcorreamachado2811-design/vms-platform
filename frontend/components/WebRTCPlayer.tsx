@@ -54,7 +54,10 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
         pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve() }
         setTimeout(resolve, 3000)
       })
-      const res = await fetch(`${API}/cameras/${cameraId}/webrtc`, {
+      const token = localStorage.getItem('vms_token')
+      const usuarioStr = localStorage.getItem('vms_usuario')
+      const usuarioId = usuarioStr ? JSON.parse(usuarioStr).id : ''
+      const res = await fetch(`${API}/cameras/${cameraId}/webrtc?usuario_id=${usuarioId}&token=${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/sdp' },
         body: pc.localDescription?.sdp,
