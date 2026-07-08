@@ -52,7 +52,7 @@ export function WebRTCPlayer({ cameraId, cameraName, onClose }: WebRTCPlayerProp
       await new Promise<void>((resolve) => {
         if (pc.iceGatheringState === 'complete') { resolve(); return }
         pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve() }
-        setTimeout(resolve, 3000)
+        setTimeout(resolve, 2000)
       })
       const token = localStorage.getItem('vms_token')
       const usuarioStr = localStorage.getItem('vms_usuario')
