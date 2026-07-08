@@ -37,6 +37,16 @@ def buscar_linha(camera_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Linha não configurada")
     return linha
 
+@router.delete("/{camera_id}")
+def deletar_linha(camera_id: UUID, db: Session = Depends(get_db)):
+    linha = db.query(LinhaContagem).filter(
+        LinhaContagem.camera_id == camera_id
+    ).first()
+    if linha:
+        db.delete(linha)
+        db.commit()
+    return {"ok": True}
+
 @router.post("/", response_model=LinhaResponse)
 def salvar_linha(dados: LinhaCreate, db: Session = Depends(get_db)):
     # Se já existe linha para esta câmera, atualiza

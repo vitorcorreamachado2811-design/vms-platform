@@ -65,9 +65,10 @@ function mjpegUrl(cameraId: string) {
 }
 
 // Tipos de regiao desenhados como LINHA (cruzamento lado A -> lado B),
-// em vez de retangulo (area/presenca). Nenhum tipo usa isso no momento;
-// "copos" foi revertido para area/presenca (caixa), nao cruzamento de linha.
-const TIPOS_LINHA: string[] = []
+// em vez de retangulo (area/presenca). "entrada" e a linha de contagem
+// (entrada/saida) e vive numa tabela separada (/contagem), nao em /regioes -
+// ver o tratamento especial em onMouseUp/deletarRegiao/useEffect abaixo.
+const TIPOS_LINHA: string[] = ['entrada']
 function ehLinha(tipo: string) {
   return TIPOS_LINHA.includes(tipo)
 }
@@ -223,6 +224,19 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
     fetch(`${API}/regioes/${camera.id}`)
       .then(r => r.json())
       .then(data => setRegioes(Array.isArray(data) ? data : []))
+      .catch(() => {})
+
+    // Linha de entrada/saida vive em /contagem, tabela separada de /regioes
+    fetch(`${API}/contagem/${camera.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(linha => {
+        if (!linha) return
+        setRegioes(prev => [...prev.filter(r => r.tipo !== 'entrada'), {
+          id: linha.id, camera_id: camera.id, tipo: 'entrada',
+          x1: linha.x1, y1: linha.y1, x2: linha.x2, y2: linha.y2,
+          tempo_alerta_min: 0,
+        }])
+      })
       .catch(() => {})
 
     // Usa frame ao vivo em vez de snapshot — mais rapido e confiavel
@@ -394,13 +408,28 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
 
     setSalvando(true)
     try {
-      const res = await fetch(`${API}/regioes/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camera_id: camera.id, tipo: tipoSelecionado, x1, y1, x2, y2 }),
-      })
-      const nova = await res.json()
-      setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), nova])
+      if (tipoSelecionado === 'entrada') {
+        // Linha de contagem: tabela/endpoint separado de /regioes.
+        const res = await fetch(`${API}/contagem/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camera_id: camera.id, x1, y1, x2, y2 }),
+        })
+        const linha = await res.json()
+        setRegioes(prev => [...prev.filter(r => r.tipo !== 'entrada'), {
+          id: linha.id, camera_id: camera.id, tipo: 'entrada',
+          x1: linha.x1, y1: linha.y1, x2: linha.x2, y2: linha.y2,
+          tempo_alerta_min: 0,
+        }])
+      } else {
+        const res = await fetch(`${API}/regioes/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camera_id: camera.id, tipo: tipoSelecionado, x1, y1, x2, y2 }),
+        })
+        const nova = await res.json()
+        setRegioes(prev => [...prev.filter(r => r.tipo !== tipoSelecionado), nova])
+      }
     } catch {}
     setSalvando(false)
     setInicio(null)
@@ -409,7 +438,11 @@ function ModalRegioes({ camera, onClose }: { camera: Camera; onClose: () => void
 
   async function deletarRegiao(tipo: string) {
     try {
-      await fetch(`${API}/regioes/${camera.id}/${tipo}`, { method: 'DELETE' })
+      if (tipo === 'entrada') {
+        await fetch(`${API}/contagem/${camera.id}`, { method: 'DELETE' })
+      } else {
+        await fetch(`${API}/regioes/${camera.id}/${tipo}`, { method: 'DELETE' })
+      }
       setRegioes(prev => prev.filter(r => r.tipo !== tipo))
     } catch {}
   }
