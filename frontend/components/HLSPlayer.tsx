@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const MEDIAMTX_URL = process.env.NEXT_PUBLIC_MEDIAMTX_URL || 'https://wonderful-laughter-production-5858.up.railway.app'
-const API = 'https://vms-platform-production.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 
 interface HLSPlayerProps {
   cameraId: string

@@ -8,7 +8,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 
-const API = 'https://vms-platform-production.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 
 // ─────────────────────────────────────────────
 // TIPOS

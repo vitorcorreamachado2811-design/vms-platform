@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 
-const API = 'https://vms-platform-production.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 
 const CAMERAS: Record<string, string> = {
   '53db3fd2-d6b6-4dff-b8f1-169ca2b866d6': 'estacionamento',

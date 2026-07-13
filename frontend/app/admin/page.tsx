@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useRouter } from 'next/navigation'
 
-const API = 'https://vms-platform-production.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 
 interface Convite {
   codigo: string

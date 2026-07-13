@@ -14,7 +14,7 @@ import asyncio
 import io
 from app.database import get_db
 from app.models.models import Camera, Empresa, Usuario
-from app.railway_utils import reiniciar_worker_railway
+from app.docker_utils import reiniciar_worker_docker
 from app.mediamtx_auth import gerar_rtsp_token, RTSP_TOKEN_TTL_SEGUNDOS
 import hashlib
 import asyncio
@@ -262,7 +262,7 @@ async def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     # (o worker so carrega a lista de cameras uma vez, na inicializacao)
     empresa = db.query(Empresa).filter(Empresa.id == camera.empresa_id).first()
     if empresa and empresa.railway_service_id:
-        asyncio.create_task(reiniciar_worker_railway(empresa.railway_service_id))
+        asyncio.create_task(reiniciar_worker_docker(empresa.railway_service_id))
         print(f"[CAMERA] Restart do worker disparado para empresa {empresa.id}", flush=True)
     elif empresa and not empresa.railway_service_id:
         print(f"[CAMERA] Empresa {empresa.id} sem railway_service_id salvo - restart automatico nao disponivel", flush=True)

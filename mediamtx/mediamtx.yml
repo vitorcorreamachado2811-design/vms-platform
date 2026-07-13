@@ -31,11 +31,9 @@ webrtcAllowOrigin: '*'
 # de SAIDA pro TURN (que o Railway permite), e o TURN vira o ponto
 # alcancavel pro cliente externo. username/password via MTX_WEBRTCICESERVERS2_0_*
 # (env vars no Railway, nao commitados aqui).
-webrtcICEServers2:
-  - url: turn:143.95.220.1:3478
 
 authMethod: http
-authHTTPAddress: http://vms-platform.railway.internal:8000/mediamtx/auth
+authHTTPAddress: http://backend:8000/mediamtx/auth
 authHTTPExclude:
   - action: api
   - action: metrics
@@ -44,3 +42,5 @@ authHTTPExclude:
 paths:
   all_others:
     {}
+webrtcAdditionalHosts: [177.136.230.76]
+webrtcICEUDPMuxAddress: :8189

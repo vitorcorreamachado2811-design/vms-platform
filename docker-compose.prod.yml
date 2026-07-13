@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  mediamtx:
+    build: ./mediamtx
+    container_name: mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS
+      - "8889:8889"   # WebRTC
+      - "9997:9997"   # API
+      - "1935:1935"   # RTMP
+    env_file: .env
+    networks:
+      - vms-net
+
+  backend:
+    build: ./backend
+    container_name: backend
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mediamtx
+    networks:
+      - vms-net
+
+  worker-testeempresa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: worker-testeempresa
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - mediamtx
+      - backend
+    networks:
+      - vms-net
+
+networks:
+  vms-net:
+    driver: bridge

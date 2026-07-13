@@ -5,7 +5,7 @@ import { DashboardAoVivo } from '../../components/DashboardAoVivo'
 import Link from 'next/link'
 import { useAuth } from '../hooks/useAuth'
 
-const API = 'https://vms-platform-production.up.railway.app'
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://vms-platform-production.up.railway.app'
 const SUPABASE_URL = 'https://wqoekhbwdrgryahoyjuo.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_0UZ6n5qJEkfAbiKveWTE0A_ixc_w9MY'
 
