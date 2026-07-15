@@ -15,6 +15,7 @@ import io
 from app.database import get_db
 from app.models.models import Camera, Empresa, Usuario
 from app.docker_utils import reiniciar_worker_docker
+from app.mediamtx_sync import sincronizar_mediamtx
 from app.mediamtx_auth import gerar_rtsp_token, RTSP_TOKEN_TTL_SEGUNDOS
 import hashlib
 import asyncio
@@ -267,6 +268,7 @@ async def criar_camera(camera: CameraCreate, db: Session = Depends(get_db)):
     elif empresa and not empresa.railway_service_id:
         print(f"[CAMERA] Empresa {empresa.id} sem railway_service_id salvo - restart automatico nao disponivel", flush=True)
 
+    asyncio.create_task(sincronizar_mediamtx(db))
     return nova
 
 
@@ -275,6 +277,7 @@ def buscar_camera(camera_id: UUID, db: Session = Depends(get_db)):
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera nao encontrada")
+    asyncio.create_task(sincronizar_mediamtx(db))
     return camera
 
 

@@ -169,6 +169,43 @@ def get_buffer(camera_id: str) -> collections.deque:
         _buffers[camera_id] = collections.deque(maxlen=MAX_BUFFER)
     return _buffers[camera_id]
 
+# Analises que geram clipe de video (15s antes + 15s depois). Apenas essas
+# precisam do buffer de frames em memoria; as demais (contagem, linha, pessoa)
+# geram so registro pro relatorio, e camera sem IA e so visualizacao ao vivo.
+ANALITICOS_CRITICOS = ("queda_leito", "queda_pe", "caixa")
+# Analises que dependem da inferencia de pose (YOLO). Se nenhuma estiver ligada,
+# a camera e apenas visualizacao ao vivo e nao precisa passar pelo modelo.
+ANALITICOS_POSE = ("queda_leito", "queda_pe", "pessoa", "banheiro_tempo",
+                   "gesto_socorro", "linha_contagem", "habitos", "caixa")
+_precisa_buffer_cache: dict = {}
+_precisa_buffer_lock = threading.Lock()
+
+def precisa_buffer(camera_id: str) -> bool:
+    """True se a camera tem alguma analise critica ligada. Em caso de falha ao
+    consultar, assume True: melhor gastar memoria do que perder o clipe de uma queda."""
+    with _precisa_buffer_lock:
+        if camera_id in _precisa_buffer_cache:
+            return _precisa_buffer_cache[camera_id]
+    try:
+        supabase = get_supabase()
+        res = supabase.table("camera_analiticos").select("*").eq("camera_id", camera_id).execute()
+        if res.data:
+            r = bool(any(res.data[0].get(k, False) for k in ANALITICOS_CRITICOS))
+        else:
+            r = False  # sem config = sem analise = sem clipe
+    except Exception as e:
+        print(f"[BUFFER] Erro ao consultar {camera_id}, mantendo buffer: {e}", flush=True)
+        r = True
+    with _precisa_buffer_lock:
+        _precisa_buffer_cache[camera_id] = r
+    print(f"[BUFFER] {camera_id}: pre-evento {'ATIVO' if r else 'desligado'}", flush=True)
+    return r
+
+def invalidar_precisa_buffer(camera_id: str = None):
+    with _precisa_buffer_lock:
+        if camera_id: _precisa_buffer_cache.pop(camera_id, None)
+        else: _precisa_buffer_cache.clear()
+
 def adicionar_frame_buffer(camera_id: str, frame):
     buf = get_buffer(camera_id)
     if len(buf) == buf.maxlen:
@@ -475,7 +512,8 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                         arr   = np.frombuffer(frame_data, dtype=np.uint8)
                         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         if frame is not None:
-                            adicionar_frame_buffer(camera_id, frame)
+                            if precisa_buffer(camera_id):
+                                adicionar_frame_buffer(camera_id, frame)
                             set_frame_atual(camera_id, frame)
                             agendar_publish(camera_id, frame)
         except Exception as e:
@@ -807,6 +845,12 @@ def processar_camera(camera):
                 continue
 
             h, w    = frame.shape[:2]
+            # Camera sem nenhuma analise de pose ligada nao precisa de inferencia:
+            # ela continua publicando o stream (thread de captura) e so isso.
+            # O YOLO e o item mais caro do worker - pular aqui e o maior ganho de CPU.
+            if not any(analiticos.get(k, False) for k in ANALITICOS_POSE):
+                time.sleep(1)
+                continue
             results = model_pose(frame, verbose=False)
 
             cama     = next((r for r in regioes if r["tipo"] == "cama"),     None)

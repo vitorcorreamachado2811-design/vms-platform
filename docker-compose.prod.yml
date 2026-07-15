@@ -11,6 +11,8 @@ services:
       - "8889:8889"   # WebRTC
       - "9997:9997"   # API
       - "1935:1935"   # RTMP
+    volumes:
+      - /opt/mediamtx-config/mediamtx.yml:/mediamtx.yml
     env_file: .env
     networks:
       - vms-net
@@ -20,6 +22,7 @@ services:
     container_name: backend
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/mediamtx-config:/mediamtx-config
     restart: unless-stopped
     env_file: .env
     ports:
@@ -29,18 +32,6 @@ services:
     networks:
       - vms-net
 
-  worker-testeempresa:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: worker-testeempresa
-    restart: unless-stopped
-    env_file: .env
-    depends_on:
-      - mediamtx
-      - backend
-    networks:
-      - vms-net
 
 networks:
   vms-net:
