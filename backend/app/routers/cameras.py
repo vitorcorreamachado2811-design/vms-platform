@@ -523,5 +523,28 @@ def snapshot(camera_id: UUID, db: Session = Depends(get_db)):
                                headers={"Cache-Control": "no-cache"})
         except Exception:
             pass
+    # Fallback: captura um frame via ffmpeg direto do substream RTSP
+    if camera.rtsp_url:
+        try:
+            import subprocess, re
+            rtsp_url = camera.rtsp_url
+            cmd = [
+                "ffmpeg", "-rtsp_transport", "tcp",
+                "-i", rtsp_url,
+                "-frames:v", "1",
+                "-f", "image2",
+                "-vcodec", "mjpeg",
+                "-q:v", "5",
+                "pipe:1"
+            ]
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
+            if result.returncode == 0 and len(result.stdout) > 1000:
+                return Response(
+                    content=result.stdout,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "no-cache"}
+                )
+        except Exception as e:
+            print(f"[SNAPSHOT] Erro ffmpeg: {e}", flush=True)
     raise HTTPException(status_code=503, detail="Snapshot nao disponivel")
 
