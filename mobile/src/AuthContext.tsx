@@ -1,7 +1,7 @@
 ﻿import React, { createContext, useContext, useEffect, useState } from "react"
 import * as SecureStore from "expo-secure-store"
 
-const API = "https://vms-platform-production.up.railway.app"
+const API = process.env.EXPO_PUBLIC_API_URL || "https://vms-platform-production.up.railway.app"
 
 interface Usuario {
   id: string; nome: string; email: string; empresa_id: string; role: string

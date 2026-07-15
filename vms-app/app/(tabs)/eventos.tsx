@@ -5,7 +5,7 @@ import {
 } from "react-native"
 import { useAuth } from "../../src/AuthContext"
 
-const API = "https://vms-platform-production.up.railway.app"
+const API = process.env.EXPO_PUBLIC_API_URL || "https://vms-platform-production.up.railway.app"
 
 interface Evento { id: string; camera_id: string; tipo: string; confianca: number; created_at: string; video_url?: string }
 

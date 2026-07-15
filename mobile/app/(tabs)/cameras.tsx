@@ -6,7 +6,7 @@ import {
 import { WebView } from "react-native-webview"
 import { useAuth } from "../../src/AuthContext"
 
-const API = "https://vms-platform-production.up.railway.app"
+const API = process.env.EXPO_PUBLIC_API_URL || "https://vms-platform-production.up.railway.app"
 
 interface Camera { id: string; nome: string; rtsp_url: string; ativo: boolean; empresa_id: string }
 

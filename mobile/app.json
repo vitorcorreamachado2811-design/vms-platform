@@ -24,6 +24,12 @@
     "scheme": "vmsplatform",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f4d0013e-5b7b-467b-9198-7aa4f4649658"
+      }
     }
   }
 }

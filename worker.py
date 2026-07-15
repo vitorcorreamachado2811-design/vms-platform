@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from ultralytics import YOLO
 from supabase import create_client
 
-API_BASE = "https://vms-platform-production.up.railway.app"
+API_BASE = os.environ.get("API_BASE", "https://vms-platform-production.up.railway.app")
 
 EMPRESA_ID = os.environ.get('EMPRESA_ID', '')  # Se vazio, processa todas
 SUPABASE_URL         = os.environ.get("SUPABASE_URL", "")
@@ -881,14 +881,14 @@ def processar_camera(camera):
                         if lado_ant is not None and lado_atual != 0:
                             if lado_ant > 0 and lado_atual < 0:
                                 if analitico_ativo("linha_contagem"):
-                                    salvar_evento(camera_id, "entrada", det["conf"], nome, rtsp_url)
+                                    salvar_evento(camera_id, "entrada", det["conf"], nome, "")
                             elif lado_ant < 0 and lado_atual > 0:
                                 if analitico_ativo("linha_contagem"):
-                                    salvar_evento(camera_id, "saida", det["conf"], nome, rtsp_url)
+                                    salvar_evento(camera_id, "saida", det["conf"], nome, "")
 
                     if not horizontal and not na_cama:
                         if analitico_ativo("pessoa") and pode_alertar("person"):
-                            salvar_evento(camera_id, "person", det["conf"], nome, rtsp_url)
+                            salvar_evento(camera_id, "person", det["conf"], nome, "")
                             cooldowns[tid]["person"] = agora
 
                     if no_quarto and not horizontal and sono_registrado_hoje != hoje_str:
