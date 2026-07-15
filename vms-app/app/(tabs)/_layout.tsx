@@ -1,4 +1,4 @@
-﻿import { Tabs } from "expo-router"
+import { Tabs } from "expo-router"
 import { Text } from "react-native"
 
 function Icon({ emoji, focused }: { emoji: string; focused: boolean }) {
@@ -14,9 +14,9 @@ export default function TabsLayout() {
       tabBarInactiveTintColor: "#6b7280",
       tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
     }}>
-      <Tabs.Screen name="cameras" options={{ title: "Cameras", tabBarIcon: ({ focused }) => <Icon emoji="ðŸ“·" focused={focused} /> }} />
-      <Tabs.Screen name="eventos" options={{ title: "Eventos", tabBarIcon: ({ focused }) => <Icon emoji="âš ï¸" focused={focused} /> }} />
-      <Tabs.Screen name="habitos" options={{ title: "Habitos", tabBarIcon: ({ focused }) => <Icon emoji="ðŸ“Š" focused={focused} /> }} />
+      <Tabs.Screen name="cameras" options={{ title: "Cameras", tabBarIcon: ({ focused }) => <Icon emoji="📷" focused={focused} /> }} />
+      <Tabs.Screen name="eventos" options={{ title: "Eventos", tabBarIcon: ({ focused }) => <Icon emoji="⚠️" focused={focused} /> }} />
+      <Tabs.Screen name="habitos" options={{ title: "Habitos", tabBarIcon: ({ focused }) => <Icon emoji="📊" focused={focused} /> }} />
     </Tabs>
   )
 }
