@@ -1,10 +1,12 @@
-﻿import { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, Modal, SafeAreaView, ActivityIndicator,
 } from "react-native"
 import { WebView } from "react-native-webview"
+import { LinearGradient } from "expo-linear-gradient"
 import { useAuth } from "../../src/AuthContext"
+import { colors } from "../../src/theme"
 
 const API = "https://vms-platform-production.up.railway.app"
 
@@ -17,7 +19,7 @@ function MjpegViewer({ camera, onClose }: { camera: Camera; onClose: () => void 
     <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh}
     img{width:100%;height:100vh;object-fit:contain}
     #st{position:fixed;top:8px;left:8px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:4px 8px;border-radius:4px;font-family:sans-serif}
-    #lv{position:fixed;top:8px;right:8px;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 7px;border-radius:4px;display:none;font-family:sans-serif;letter-spacing:1px}
+    #lv{position:fixed;top:8px;right:8px;background:#22C550;color:#fff;font-size:10px;font-weight:bold;padding:3px 7px;border-radius:4px;display:none;font-family:sans-serif;letter-spacing:1px}
     </style></head><body>
     <div id="st">Conectando...</div><div id="lv">AO VIVO</div>
     <img src="${mjpegUrl}"
@@ -46,18 +48,27 @@ function MjpegViewer({ camera, onClose }: { camera: Camera; onClose: () => void 
 }
 
 function CameraCard({ camera, onAoVivo }: { camera: Camera; onAoVivo: () => void }) {
+  const corStatus = camera.ativo ? colors.success : colors.danger
+
   return (
     <View style={s.card}>
       <View style={s.cardInfo}>
         <Text style={s.cardNome}>{camera.nome}</Text>
-        <View style={[s.badge, camera.ativo ? s.badgeAtivo : s.badgeInativo]}>
-          <Text style={[s.badgeText, camera.ativo ? s.badgeTextAtivo : s.badgeTextInativo]}>
+        <View style={s.badge}>
+          <View style={[s.badgeDot, { backgroundColor: corStatus }]} />
+          <Text style={[s.badgeText, { color: corStatus }]}>
             {camera.ativo ? "Ativa" : "Inativa"}
           </Text>
         </View>
       </View>
-      <TouchableOpacity style={s.btnLive} onPress={onAoVivo}>
-        <Text style={s.btnLiveText}>Ao Vivo</Text>
+      <TouchableOpacity onPress={onAoVivo} activeOpacity={0.85}>
+        <LinearGradient
+          colors={[colors.primary, colors.secondary]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={s.btnLive}
+        >
+          <Text style={s.btnLiveText}>Ao Vivo</Text>
+        </LinearGradient>
       </TouchableOpacity>
     </View>
   )
@@ -77,21 +88,23 @@ export default function CamerasScreen() {
       .catch(() => setCarregando(false))
   }, [usuario])
 
+  const ativas = cameras.filter(c => c.ativo).length
+
   return (
     <SafeAreaView style={s.container}>
       <View style={s.header}>
         <View>
-          <Text style={s.titulo}>Cameras</Text>
-          <Text style={s.subtitulo}>{cameras.length} cadastradas</Text>
+          <Text style={s.titulo}>Câmeras</Text>
+          <Text style={s.subtitulo}>{ativas} de {cameras.length} online</Text>
         </View>
         <TouchableOpacity onPress={logout} style={s.logoutBtn}>
           <Text style={s.logoutText}>Sair</Text>
         </TouchableOpacity>
       </View>
       {carregando ? (
-        <View style={s.center}><ActivityIndicator color="#3b82f6" size="large" /></View>
+        <View style={s.center}><ActivityIndicator color={colors.secondary} size="large" /></View>
       ) : cameras.length === 0 ? (
-        <View style={s.center}><Text style={s.vazio}>Nenhuma camera cadastrada.</Text></View>
+        <View style={s.center}><Text style={s.vazio}>Nenhuma câmera cadastrada.</Text></View>
       ) : (
         <FlatList data={cameras} keyExtractor={c => c.id}
           contentContainerStyle={{ padding: 16, gap: 12 }}
@@ -103,30 +116,50 @@ export default function CamerasScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#1f2937" },
-  titulo: { color: "#60a5fa", fontSize: 20, fontWeight: "800" },
-  subtitulo: { color: "#6b7280", fontSize: 12, marginTop: 2 },
-  logoutBtn: { backgroundColor: "#1f2937", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  logoutText: { color: "#9ca3af", fontSize: 13, fontWeight: "600" },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  titulo: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  subtitulo: { color: colors.textMuted, fontSize: 12, marginTop: 3 },
+  logoutBtn: {
+    backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.border,
+  },
+  logoutText: { color: colors.textMuted, fontSize: 13, fontWeight: "600" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  vazio: { color: "#6b7280", fontSize: 14 },
-  card: { backgroundColor: "#111827", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "#1f2937" },
-  cardInfo: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  cardNome: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  badgeAtivo: { backgroundColor: "#052e16" },
-  badgeInativo: { backgroundColor: "#450a0a" },
+  vazio: { color: colors.textMuted, fontSize: 14 },
+  card: {
+    backgroundColor: colors.surface, borderRadius: 16, padding: 18,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  cardInfo: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  cardNome: { color: colors.text, fontSize: 16, fontWeight: "700", flex: 1 },
+  badge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  badgeDot: { width: 6, height: 6, borderRadius: 3 },
   badgeText: { fontSize: 11, fontWeight: "700" },
-  badgeTextAtivo: { color: "#86efac" },
-  badgeTextInativo: { color: "#fca5a5" },
-  btnLive: { backgroundColor: "#3b82f6", borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  btnLiveText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  btnLive: { borderRadius: 12, paddingVertical: 13, alignItems: "center" },
+  btnLiveText: { color: "#fff", fontWeight: "700", fontSize: 14, letterSpacing: 0.3 },
 })
 
 const mv = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#111827" },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e" },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface,
+  },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
   nome: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  closeBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
+  closeBtn: {
+    width: 34, height: 34, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center", justifyContent: "center",
+  },
 })

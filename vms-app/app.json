@@ -1,1 +1,43 @@
-{"expo":{"name":"VMS Platform","slug":"vms-platform","version":"1.0.0","orientation":"portrait","icon":"./assets/icon.png","userInterfaceStyle":"dark","newArchEnabled":false,"splash":{"image":"./assets/splash-icon.png","resizeMode":"contain","backgroundColor":"#030712"},"ios":{"supportsTablet":true,"bundleIdentifier":"com.vmsplatform.app"},"android":{"adaptiveIcon":{"foregroundImage":"./assets/adaptive-icon.png","backgroundColor":"#030712"},"package":"com.vmsplatform.app"},"plugins":["expo-router","expo-secure-store"],"scheme":"vmsplatform","experiments":{"typedRoutes":true}}}
+{
+  "expo": {
+    "name": "VMS Platform",
+    "slug": "vms-platform",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030712"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vmsplatform.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030712"
+      },
+      "package": "com.vmsplatform.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "scheme": "vmsplatform",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "f4d0013e-5b7b-467b-9198-7aa4f4649658"
+      }
+    }
+  }
+}
