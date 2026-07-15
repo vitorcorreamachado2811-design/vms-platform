@@ -12,7 +12,7 @@ from app.docker_utils import criar_worker_docker
 
 async def criar_worker_e_salvar(empresa_id: str, empresa_nome: str):
     """Cria o worker no Railway e salva o service_id retornado na empresa."""
-    service_id = await criar_worker_docker(empresa_id, empresa_nome)
+    service_id = criar_worker_docker(empresa_id, empresa_nome)
     if service_id:
         db = SessionLocal()
         try:
