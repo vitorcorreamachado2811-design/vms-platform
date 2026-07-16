@@ -434,6 +434,7 @@ def get_frame_atual(camera_id: str):
 
 
 _captura_status: dict = {}
+_frame_count: dict = {}
 
 def _thread_captura_continua(camera_id: str, rtsp_url: str):
     SOI = b"\xff\xd8"; EOI = b"\xff\xd9"
@@ -446,29 +447,9 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
                 "-map", "0:v", "-vf", f"fps={FPS_BUFFER}", "-q:v", "8", "-threads", "1",
                 "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
             ]
-            if MEDIAMTX_PUBLISH_SECRET:
-                # Segunda saida no MESMO processo ffmpeg (nao abre conexao nova
-                # na camera/DVR nem processo extra - evita esgotar threads/processos
-                # do container com muitas cameras, como ja aconteceu antes).
-                # -threads 1 em cada saida: com 11 cameras rodando simultaneamente,
-                # os encoders multi-thread padrao esgotavam threads do container
-                # ("Resource temporarily unavailable").
-                # Resolucao/bitrate baixos e GOP curto (keyframe a cada ~2s):
-                # via TURN (necessario pq o Railway bloqueia UDP de entrada),
-                # um keyframe grande em 1080p vira muitos pacotes RTP - um so
-                # perdido/corrompido no relay derruba o frame inteiro, e o
-                # ExoPlayer/libwebrtc ficava pedindo keyframe em loop por
-                # 20s+ ate um chegar inteiro por sorte. Frame menor e mais
-                # frequente reduz drasticamente essa janela.
-                cmd += [
-                    "-map", "0:v",
-                    "-vf", f"fps={FPS_BUFFER},scale=640:-2",
-                    "-c:v", "libx264", "-preset", "ultrafast",
-                    "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-threads", "1",
-                    "-b:v", "500k", "-maxrate", "500k", "-bufsize", "500k",
-                    "-g", str(FPS_BUFFER * 2),
-                    "-f", "flv", _destino_publish_rtmp(camera_id),
-                ]
+            # Publish RTMP removido: o MediaMTX agora serve o ao vivo via
+            # sourceOnDemand (puxa direto da camera quando alguem pede).
+            # O worker so precisa do MJPEG para alimentar a IA.
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             with _proc_lock:
                 _proc_atual[camera_id] = proc
@@ -851,6 +832,12 @@ def processar_camera(camera):
             if not any(analiticos.get(k, False) for k in ANALITICOS_POSE):
                 time.sleep(1)
                 continue
+            # Frame skip: roda o YOLO so em 1 de cada 3 frames (~1.7fps).
+            # O buffer continua a 5fps (necessario pro clipe pre-evento),
+            # mas a inferencia e o item mais caro e nao precisa de 5fps.
+            _frame_count[camera_id] = _frame_count.get(camera_id, 0) + 1
+            if _frame_count[camera_id] % 3 != 0:
+                continue
             results = model_pose(frame, verbose=False)
 
             cama     = next((r for r in regioes if r["tipo"] == "cama"),     None)
@@ -1011,7 +998,20 @@ def main():
         try:
             resp    = requests.get(f"{API_BASE}/cameras/", timeout=10)
             empresa_id_env = os.environ.get('EMPRESA_ID', '')
-            cameras = [c for c in resp.json() if c.get('ativo') and c.get('empresa_id') and (not empresa_id_env or c.get('empresa_id') == empresa_id_env)]
+            todas = [c for c in resp.json() if c.get('ativo') and c.get('empresa_id') and (not empresa_id_env or c.get('empresa_id') == empresa_id_env)]
+            # So processa cameras que tem alguma IA ligada.
+            # Cameras sem IA sao servidas pelo MediaMTX via runOnDemand - o worker nao precisa tocar nelas.
+            def _tem_ia(cam):
+                try:
+                    analiticos = buscar_analiticos(cam['id'])
+                    return any(analiticos.get(k, False) for k in (
+                        'caixa', 'freezer', 'copos', 'linha_contagem', 'pessoa',
+                        'queda_leito', 'queda_pe', 'gesto_socorro', 'habitos'
+                    ))
+                except Exception:
+                    return False
+            cameras = [c for c in todas if _tem_ia(c)]
+            print(f"[MAIN] {len(cameras)} cameras com IA de {len(todas)} ativas", flush=True)
             break
         except Exception as e:
             print(f"Erro: {e}. Tentando em 5s...", flush=True)
