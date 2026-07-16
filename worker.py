@@ -443,7 +443,7 @@ def _thread_captura_continua(camera_id: str, rtsp_url: str):
         proc = None
         try:
             cmd = [
-                "ffmpeg", "-rtsp_transport", "tcp", "-threads", "1", "-i", rtsp_url,
+                "ffmpeg", "-rtsp_transport", "tcp", "-threads", "1", "-r", str(FPS_BUFFER), "-i", rtsp_url,
                 "-map", "0:v", "-vf", f"fps={FPS_BUFFER}", "-q:v", "8", "-threads", "1",
                 "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
             ]
