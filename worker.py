@@ -20,12 +20,15 @@ EMPRESA_ID = os.environ.get('EMPRESA_ID', '')  # Se vazio, processa todas
 SUPABASE_URL         = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
-print("Carregando modelo YOLOv8 Pose...", flush=True)
-model_pose = YOLO("yolov8n-pose.pt")
+print("Carregando modelo YOLO11 Pose...", flush=True)
+model_pose = YOLO("yolo11n-pose.pt")
 print("Modelo Pose carregado!", flush=True)
 
-print("Carregando modelo YOLOv8 Objetos (copos/potes)...", flush=True)
-model_objetos = YOLO("yolov8n.pt")
+print("Carregando modelo YOLO11 Objetos (copos/potes)...", flush=True)
+model_objetos = YOLO("yolo11n.pt")
+print("Carregando modelo YOLO11 Deteccao (linha/contagem)...", flush=True)
+model_deteccao = YOLO("yolo11n.pt")  # mesmo modelo, usado separado pra linha_contagem sem pose
+print("Modelo Deteccao carregado!", flush=True)
 print("Modelo Objetos carregado!", flush=True)
 
 OMBRO_ESQ     = 5
@@ -838,7 +841,22 @@ def processar_camera(camera):
             _frame_count[camera_id] = _frame_count.get(camera_id, 0) + 1
             if _frame_count[camera_id] % 3 != 0:
                 continue
-            results = model_pose(frame, verbose=False)
+            # Escolhe modelo por analise ativa:
+            # - caixa: MediaPipe (leve) + YOLO11n (bbox/tracking)
+            # - linha: YOLO11n sem pose
+            # - outros: YOLO11n-pose
+            _tem_caixa = analiticos.get("caixa", False)
+            _so_linha = analiticos.get("linha_contagem", False) and not _tem_caixa
+            mp_results = None
+            if _tem_caixa:
+                import cv2 as _cv2
+                frame_rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
+                mp_results = _pose_detector.process(frame_rgb)
+                results = model_deteccao(frame, verbose=False)
+            elif _so_linha:
+                results = model_deteccao(frame, verbose=False)
+            else:
+                results = model_pose(frame, verbose=False)
 
             cama     = next((r for r in regioes if r["tipo"] == "cama"),     None)
             banheiro = next((r for r in regioes if r["tipo"] == "banheiro"), None)
@@ -892,8 +910,9 @@ def processar_camera(camera):
                     def analitico_ativo(key): return analiticos.get(key, False)
 
                     if caixa_regiao and analitico_ativo("caixa"):
+                        kps_caixa = _mediapipe_para_kps(mp_results, w, h) if mp_results is not None else det.get("kps")
                         detectar_comportamento_suspeito(
-                            tid, det["kps"], caixa_regiao, w, h, agora_dt, agora,
+                            tid, kps_caixa, caixa_regiao, w, h, agora_dt, agora,
                             camera_id, empresa_id, nome, rtsp_url, det["conf"], cooldowns
                         )
 
@@ -1005,7 +1024,7 @@ def main():
                 try:
                     analiticos = buscar_analiticos(cam['id'])
                     return any(analiticos.get(k, False) for k in (
-                        'caixa', 'freezer', 'copos', 'linha_contagem', 'pessoa',
+                        'caixa', 'copos', 'linha_contagem', 'pessoa',
                         'queda_leito', 'queda_pe', 'gesto_socorro', 'habitos'
                     ))
                 except Exception:
