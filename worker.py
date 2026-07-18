@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse
 from ultralytics import YOLO
 from supabase import create_client
+import mediapipe as mp
 
 API_BASE = os.environ.get("API_BASE", "https://vms-platform-production.up.railway.app")
 
@@ -23,6 +24,7 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 print("Carregando modelo YOLO11 Pose...", flush=True)
 model_pose = YOLO("yolo11n-pose.pt")
+_pose_detector = mp.solutions.pose.Pose(model_complexity=0, static_image_mode=False)
 print("Modelo Pose carregado!", flush=True)
 
 print("Carregando modelo YOLO11 Objetos (copos/potes)...", flush=True)
@@ -538,6 +540,19 @@ def pessoa_na_regiao(cx, cy, regiao):
 
 def lado_da_linha(px, py, x1, y1, x2, y2):
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+
+# Mapeamento MediaPipe (33 landmarks) → COCO 17 keypoints (índices YOLO pose)
+_MP_TO_COCO = [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
+
+def _mediapipe_para_kps(mp_results, w: int, h: int):
+    if mp_results is None or not mp_results.pose_landmarks:
+        return None
+    lm = mp_results.pose_landmarks.landmark
+    kps = []
+    for idx in _MP_TO_COCO:
+        p = lm[idx]
+        kps.append([p.x * w, p.y * h, p.visibility])
+    return kps
 
 def buscar_clipe_dvr_intelbras(camera_id: str, rtsp_url: str, evento_id: str,
                                timestamp_evento: datetime, dvr_canal: int = 1):
