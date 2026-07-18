@@ -13,14 +13,24 @@ VPS="vitor@177.136.230.76"
 VPS_DIR="/home/vitor/vms-platform/backend"
 LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-WORKER="${1:-worker-tba-capivari}"
+WORKER="worker-tba-capivari"
 REBUILD=false
 
 for arg in "$@"; do
-  [[ "$arg" == "--rebuild" ]] && REBUILD=true
+  case "$arg" in
+    --rebuild) REBUILD=true ;;
+    worker-*) WORKER="$arg" ;;
+  esac
 done
 
-echo "==> Enviando worker.py para a VPS..."
+echo "================================================"
+echo " Worker : $WORKER"
+echo " Rebuild: $REBUILD"
+echo " VPS    : $VPS"
+echo "================================================"
+
+echo ""
+echo "==> Enviando worker.py..."
 scp "$LOCAL_DIR/worker.py" "$VPS:$VPS_DIR/worker.py"
 
 if $REBUILD; then
@@ -28,27 +38,39 @@ if $REBUILD; then
   scp "$LOCAL_DIR/Dockerfile"       "$VPS:$VPS_DIR/Dockerfile"
   scp "$LOCAL_DIR/requirements.txt" "$VPS:$VPS_DIR/requirements.txt"
 
-  echo "==> Rebuild da imagem na VPS..."
-  ssh "$VPS" "cd $VPS_DIR && docker build -t worker-image -f Dockerfile ."
+  echo "==> Coletando env vars do container atual (antes de parar)..."
+  ssh "$VPS" bash << 'REMOTE'
+    set -e
+    WORKER_NAME="${WORKER:-worker-tba-capivari}"
 
-  echo "==> Parando container $WORKER..."
+    # Extrai env vars do container em formato KEY=VALUE, ignora PATH/HOME/etc internos do Python
+    docker inspect "$WORKER_NAME" \
+      --format '{{range .Config.Env}}{{println .}}{{end}}' \
+      | grep -v '^PATH=\|^HOME=\|^LANG=\|^LC_\|^TERM=' \
+      > /tmp/worker_env_backup.txt
+
+    echo "Env vars salvas:"
+    cat /tmp/worker_env_backup.txt
+REMOTE
+
+  echo "==> Parando e removendo container $WORKER..."
   ssh "$VPS" "docker stop $WORKER && docker rm $WORKER"
 
-  echo "==> Subindo novo container $WORKER..."
-  ssh "$VPS" "
-    EMPRESA_ID=\$(docker inspect $WORKER 2>/dev/null | python3 -c \"
-import sys, json
-envs = json.load(sys.stdin)[0]['Config']['Env']
-for e in envs:
-    if e.startswith('EMPRESA_ID='): print(e.split('=',1)[1])
-\" 2>/dev/null || echo '')
-    docker run -d --name $WORKER --restart unless-stopped \
-      --env-file $VPS_DIR/secrets/worker.env \
-      -e EMPRESA_ID=\$EMPRESA_ID \
+  echo "==> Rebuilding imagem worker-image na VPS (pode demorar ~5min)..."
+  ssh "$VPS" "cd $VPS_DIR && docker build -t worker-image -f Dockerfile . 2>&1"
+
+  echo "==> Recriando container $WORKER com env vars originais..."
+  ssh "$VPS" bash << REMOTE
+    set -e
+    docker run -d --name $WORKER \
+      --restart unless-stopped \
+      \$(awk '{print "--env " \$0}' /tmp/worker_env_backup.txt | tr '\n' ' ') \
       worker-image
-  "
+    echo "Container $WORKER criado."
+REMOTE
+
 else
-  echo "==> Copiando worker.py para dentro do container $WORKER..."
+  echo "==> Copiando worker.py para dentro do container..."
   ssh "$VPS" "docker cp $VPS_DIR/worker.py $WORKER:/app/worker.py"
 
   echo "==> Reiniciando $WORKER..."
@@ -56,5 +78,12 @@ else
 fi
 
 echo ""
-echo "==> Deploy concluído. Logs:"
-ssh "$VPS" "docker logs $WORKER --tail 15"
+echo "==> Aguardando 5s para inicialização..."
+sleep 5
+
+echo "==> Últimos logs:"
+ssh "$VPS" "docker logs $WORKER --tail 20"
+
+echo ""
+echo "==> Status dos containers:"
+ssh "$VPS" "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"
