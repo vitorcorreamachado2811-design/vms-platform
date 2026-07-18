@@ -1,4 +1,4 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     libgl1 \
     libxcb1 \
     libx11-6 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -13,8 +14,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Baixa o modelo pose na build — evita download em runtime
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n-pose.pt')"
+# Pre-download dos modelos na build — evita download em runtime
+RUN python -c "from ultralytics import YOLO; YOLO('yolo11n-pose.pt'); YOLO('yolo11n.pt')"
 
 COPY worker.py .
 

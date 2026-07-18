@@ -1,5 +1,6 @@
-﻿ultralytics==8.4.61
+ultralytics
 opencv-python-headless
 requests==2.32.3
 numpy
 supabase
+mediapipe==0.10.9
