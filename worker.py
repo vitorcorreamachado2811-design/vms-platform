@@ -547,17 +547,22 @@ def buscar_clipe_dvr_intelbras(camera_id: str, rtsp_url: str, evento_id: str,
     host     = parsed.hostname or ""
     port     = parsed.port or 554
 
-    track     = dvr_canal * 100 + 1  # 101 = canal 1 main, 201 = canal 2 main
+    # Tenta extrair canal da própria URL (ex: channel=3 em URLs Dahua/Intelbras)
+    from urllib.parse import parse_qs
+    qs = parse_qs(parsed.query)
+    canal = int(qs["channel"][0]) if "channel" in qs else dvr_canal
+
     inicio    = timestamp_evento - timedelta(seconds=PRE_EVENTO_SEG)
     fim       = timestamp_evento + timedelta(seconds=POS_EVENTO_SEG)
-    start_str = inicio.strftime("%Y%m%dT%H%M%SZ")
-    end_str   = fim.strftime("%Y%m%dT%H%M%SZ")
+    # Formato Dahua/Intelbras: YYYY_MM_DD_HH_MM_SS
+    start_str = inicio.strftime("%Y_%m_%d_%H_%M_%S")
+    end_str   = fim.strftime("%Y_%m_%d_%H_%M_%S")
 
     playback_url = (
         f"rtsp://{user}:{password}@{host}:{port}"
-        f"/Streaming/tracks/{track}?starttime={start_str}&endtime={end_str}"
+        f"/cam/playback?channel={canal}&starttime={start_str}&endtime={end_str}"
     )
-    print(f"[CLIPE-DVR] Buscando clip canal={dvr_canal} track={track} {start_str}->{end_str}", flush=True)
+    print(f"[CLIPE-DVR] Buscando clip canal={canal} {start_str}->{end_str}", flush=True)
 
     tmp      = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp_path = tmp.name
