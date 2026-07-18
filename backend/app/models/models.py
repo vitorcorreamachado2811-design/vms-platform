@@ -33,6 +33,7 @@ class Camera(Base):
     nome = Column(String, nullable=False)
     rtsp_url = Column(String, nullable=False)
     http_url = Column(String, nullable=True)
+    dvr_canal = Column(Integer, nullable=True)
     ativo = Column(Boolean, default=True)
     criado_em = Column(DateTime, default=lambda: datetime.now(UTC))
     empresa = relationship("Empresa", back_populates="cameras")

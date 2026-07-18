@@ -10,7 +10,8 @@ import collections
 import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse
 from ultralytics import YOLO
 from supabase import create_client
 
@@ -538,7 +539,66 @@ def pessoa_na_regiao(cx, cy, regiao):
 def lado_da_linha(px, py, x1, y1, x2, y2):
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
-def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
+def buscar_clipe_dvr_intelbras(camera_id: str, rtsp_url: str, evento_id: str,
+                               timestamp_evento: datetime, dvr_canal: int = 1):
+    parsed   = urlparse(rtsp_url)
+    user     = parsed.username or ""
+    password = parsed.password or ""
+    host     = parsed.hostname or ""
+    port     = parsed.port or 554
+
+    track     = dvr_canal * 100 + 1  # 101 = canal 1 main, 201 = canal 2 main
+    inicio    = timestamp_evento - timedelta(seconds=PRE_EVENTO_SEG)
+    fim       = timestamp_evento + timedelta(seconds=POS_EVENTO_SEG)
+    start_str = inicio.strftime("%Y%m%dT%H%M%SZ")
+    end_str   = fim.strftime("%Y%m%dT%H%M%SZ")
+
+    playback_url = (
+        f"rtsp://{user}:{password}@{host}:{port}"
+        f"/Streaming/tracks/{track}?starttime={start_str}&endtime={end_str}"
+    )
+    print(f"[CLIPE-DVR] Buscando clip canal={dvr_canal} track={track} {start_str}->{end_str}", flush=True)
+
+    tmp      = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+
+    try:
+        result = subprocess.run([
+            "ffmpeg", "-y",
+            "-rtsp_transport", "tcp",
+            "-i", playback_url,
+            "-t", str(PRE_EVENTO_SEG + POS_EVENTO_SEG),
+            "-vcodec", "libx264", "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            tmp_path
+        ], capture_output=True, timeout=90)
+
+        if result.returncode != 0:
+            print(f"[CLIPE-DVR] ffmpeg erro: {result.stderr.decode()[-400:]}", flush=True)
+            return None
+
+        supabase     = get_supabase()
+        dia_slot     = ((datetime.now(timezone.utc).day - 1) % 10) + 1
+        storage_path = f"eventos/{camera_id}/dia_{dia_slot:02d}.mp4"
+        with open(tmp_path, "rb") as f:
+            video_bytes = f.read()
+        supabase.storage.from_("event-clips").upload(
+            path=storage_path, file=video_bytes,
+            file_options={"content-type": "video/mp4", "upsert": "true"}
+        )
+        url = supabase.storage.from_("event-clips").get_public_url(storage_path)
+        print(f"[CLIPE-DVR] Upload OK -> {url}", flush=True)
+        return url
+    except Exception as e:
+        print(f"[CLIPE-DVR] Erro: {e}", flush=True)
+        return None
+    finally:
+        try: os.remove(tmp_path)
+        except: pass
+
+
+def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url="", dvr_canal=None):
     try:
         resp = requests.post(f"{API_BASE}/eventos/", json={"camera_id": camera_id, "tipo": tipo, "confianca": round(confianca, 2)}, timeout=3)
         evento_id = None
@@ -546,8 +606,13 @@ def salvar_evento(camera_id, tipo, confianca, nome, rtsp_url=""):
         except: pass
         print(f"[{nome}] {tipo} ({confianca:.0%})", flush=True)
         if evento_id and rtsp_url:
-            def _gravar(eid=evento_id, cid=camera_id, rurl=rtsp_url):
-                url = gravar_e_fazer_upload_clipe(cid, rurl, str(eid))
+            ts_evento = datetime.now(timezone.utc)
+            def _gravar(eid=evento_id, cid=camera_id, rurl=rtsp_url, ts=ts_evento, canal=dvr_canal):
+                if canal is not None:
+                    time.sleep(POS_EVENTO_SEG + 5)
+                    url = buscar_clipe_dvr_intelbras(cid, rurl, str(eid), ts, canal)
+                else:
+                    url = gravar_e_fazer_upload_clipe(cid, rurl, str(eid))
                 if url:
                     try:
                         requests.patch(f"{API_BASE}/eventos/{eid}", json={"video_url": url}, timeout=5)
@@ -671,7 +736,7 @@ def _dist_norm(p1, p2):
     return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
 
 def detectar_comportamento_suspeito(tid, kps, caixa_regiao, w, h, agora_dt, agora,
-                                     camera_id, empresa_id, nome, rtsp_url, conf, cooldowns):
+                                     camera_id, empresa_id, nome, rtsp_url, conf, cooldowns, dvr_canal=None):
     if kps is None or len(kps) < 17 or caixa_regiao is None:
         return
     estado_tid = _estado_mao_caixa.setdefault(tid, {})
@@ -712,7 +777,7 @@ def detectar_comportamento_suspeito(tid, kps, caixa_regiao, w, h, agora_dt, agor
 
     cooldowns[tid]["comportamento_suspeito"] = agora
     estado_tid["mao_caixa_em"] = None
-    salvar_evento(camera_id, "comportamento_suspeito_caixa", conf, nome, rtsp_url)
+    salvar_evento(camera_id, "comportamento_suspeito_caixa", conf, nome, rtsp_url, dvr_canal)
 
 
 # ---------------------------------------------------------
@@ -792,6 +857,7 @@ def processar_camera(camera):
     nome       = camera["nome"]
     rtsp_url   = camera["rtsp_url"]
     empresa_id = camera.get("empresa_id", "")
+    dvr_canal  = camera.get("dvr_canal")
 
     print(f"[{nome}] Iniciando monitoramento...", flush=True)
     iniciar_captura_continua(camera_id, rtsp_url)
@@ -913,16 +979,16 @@ def processar_camera(camera):
                         kps_caixa = _mediapipe_para_kps(mp_results, w, h) if mp_results is not None else det.get("kps")
                         detectar_comportamento_suspeito(
                             tid, kps_caixa, caixa_regiao, w, h, agora_dt, agora,
-                            camera_id, empresa_id, nome, rtsp_url, det["conf"], cooldowns
+                            camera_id, empresa_id, nome, rtsp_url, det["conf"], cooldowns, dvr_canal
                         )
 
                     if estava_na_cama and not na_cama and horizontal:
                         if analitico_ativo("queda_leito") and pode_alertar("queda_leito"):
-                            salvar_evento(camera_id, "queda_leito", det["conf"], nome, rtsp_url)
+                            salvar_evento(camera_id, "queda_leito", det["conf"], nome, rtsp_url, dvr_canal)
                             cooldowns[tid]["queda_leito"] = agora
                     elif not na_cama and horizontal and not estava_na_cama:
                         if analitico_ativo("queda_pe") and pode_alertar("queda_pe"):
-                            salvar_evento(camera_id, "queda_pe", det["conf"], nome, rtsp_url)
+                            salvar_evento(camera_id, "queda_pe", det["conf"], nome, rtsp_url, dvr_canal)
                             cooldowns[tid]["queda_pe"] = agora
 
                     if linha:

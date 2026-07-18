@@ -112,6 +112,7 @@ class CameraCreate(BaseModel):
     rtsp_url: str
     http_url: Optional[str] = None
     empresa_id: UUID
+    dvr_canal: Optional[int] = None
 
 
 class CameraUpdate(BaseModel):
@@ -119,6 +120,7 @@ class CameraUpdate(BaseModel):
     rtsp_url: Optional[str] = None
     http_url: Optional[str] = None
     ativo: Optional[bool] = None
+    dvr_canal: Optional[int] = None
 
 
 class CameraResponse(BaseModel):
@@ -126,6 +128,7 @@ class CameraResponse(BaseModel):
     nome: str
     rtsp_url: str
     http_url: Optional[str] = None
+    dvr_canal: Optional[int] = None
     ativo: bool
     empresa_id: Optional[UUID] = None
     class Config:
