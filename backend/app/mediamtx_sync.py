@@ -43,20 +43,21 @@ def _gerar_yml(cameras) -> str:
         if not cam.rtsp_url or not cam.ativo:
             continue
         url = _rtsp_substream(cam.rtsp_url)
-        ip  = _dvr_ip(url)
+        ip = _dvr_ip(url)
         linhas.append(f"  {cam.id}:")
         if ip in BFRAME_DVR_IPS:
             # DVR com B-frames: ffmpeg transcodifica para H264 Baseline antes
             # de publicar no MediaMTX, eliminando o erro "WebRTC doesn't
             # support H264 streams with B-frames".
             ffmpeg_cmd = (
-                f"ffmpeg -rtsp_transport tcp -i {url} "
+                f"ffmpeg -rtsp_transport tcp -i '{url}' "
                 f"-c:v libx264 -profile:v baseline -preset ultrafast "
                 f"-tune zerolatency -an "
                 f"-f rtsp rtsp://127.0.0.1:8554/{cam.id}"
             )
             linhas += [
                 f"    runOnDemand: {ffmpeg_cmd}",
+                f"    runOnDemandStartTimeout: 30s",
                 f"    runOnDemandRestart: yes",
                 f"    runOnDemandCloseAfter: 60s",
             ]
