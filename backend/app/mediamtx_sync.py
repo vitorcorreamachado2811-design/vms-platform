@@ -46,11 +46,12 @@ def _gerar_yml(cameras) -> str:
         ip = _dvr_ip(url)
         linhas.append(f"  {cam.id}:")
         if ip in BFRAME_DVR_IPS:
-            # DVR com B-frames: ffmpeg transcodifica para H264 Baseline antes
-            # de publicar no MediaMTX, eliminando o erro "WebRTC doesn't
-            # support H264 streams with B-frames".
+            # DVR com B-frames: usa stream principal (subtype=0) pois tem
+            # timestamps corretos. O substream deste DVR envia frames sem
+            # timestamps RTP validos, causando freeze no WebRTC.
+            url_main = re.sub(r"subtype=\d+", "subtype=0", cam.rtsp_url)
             ffmpeg_cmd = (
-                f"ffmpeg -rtsp_transport tcp -i '{url}' "
+                f"ffmpeg -rtsp_transport tcp -i '{url_main}' "
                 f"-c:v libx264 -profile:v baseline -preset ultrafast "
                 f"-tune zerolatency -an "
                 f"-f rtsp rtsp://127.0.0.1:8554/{cam.id}"
