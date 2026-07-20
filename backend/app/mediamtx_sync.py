@@ -34,9 +34,7 @@ def _gerar_yml(cameras) -> str:
         "  - action: api",
         "  - action: metrics",
         "  - action: pprof",
-        # Permite publish local do ffmpeg de transcoding sem autenticacao
         "  - action: publish",
-        "    ips: [127.0.0.1]",
         "webrtcAdditionalHosts: [177.136.230.76]",
         "webrtcLocalUDPAddress: :8189",
         "paths:",
