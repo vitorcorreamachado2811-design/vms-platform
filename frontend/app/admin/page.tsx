@@ -16,6 +16,13 @@ interface Empresa {
   id: string
   nome: string
   email: string
+  dvr_marca?: string | null
+}
+
+const DVR_LABEL: Record<string, string> = {
+  intelbras: 'Intelbras',
+  hikvision: 'Hikvision',
+  onvif: 'ONVIF',
 }
 
 export default function AdminPage() {
@@ -26,6 +33,7 @@ export default function AdminPage() {
   const [empresaId, setEmpresaId] = useState('')
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
+  const [novaEmpresaDvr, setNovaEmpresaDvr] = useState<string>('')
   const [dias, setDias] = useState(7)
   const [gerando, setGerando] = useState(false)
   const [criandoEmpresa, setCriandoEmpresa] = useState(false)
@@ -56,12 +64,13 @@ export default function AdminPage() {
       const res = await fetch(`${API}/empresas/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: novaEmpresaNome, email: novaEmpresaEmail })
+        body: JSON.stringify({ nome: novaEmpresaNome, email: novaEmpresaEmail, dvr_marca: novaEmpresaDvr || null })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail)
       setNovaEmpresaNome('')
       setNovaEmpresaEmail('')
+      setNovaEmpresaDvr('')
       await buscarEmpresas()
       setEmpresaId(data.id)
       setAba('convites')
@@ -147,6 +156,16 @@ export default function AdminPage() {
                   placeholder="email@empresa.com" type="email" value={novaEmpresaEmail}
                   onChange={e => setNovaEmpresaEmail(e.target.value)} />
               </div>
+              <div>
+                <label className="text-gray-400 text-sm mb-1 block">Modelo de DVR</label>
+                <select className="w-full bg-gray-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={novaEmpresaDvr} onChange={e => setNovaEmpresaDvr(e.target.value)}>
+                  <option value="">Selecione o modelo de DVR</option>
+                  <option value="intelbras">Intelbras</option>
+                  <option value="hikvision">Hikvision</option>
+                  <option value="onvif">ONVIF (genérico)</option>
+                </select>
+              </div>
               <button onClick={criarEmpresa} disabled={criandoEmpresa || !novaEmpresaNome || !novaEmpresaEmail}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white py-3 rounded-lg font-bold transition">
                 {criandoEmpresa ? 'Criando...' : '+ Criar Empresa'}
@@ -162,6 +181,9 @@ export default function AdminPage() {
                     <div>
                       <div className="text-white font-medium">{e.nome}</div>
                       <div className="text-gray-500 text-xs">{e.email}</div>
+                      {e.dvr_marca && (
+                        <div className="text-blue-400 text-xs mt-0.5">{DVR_LABEL[e.dvr_marca] ?? e.dvr_marca}</div>
+                      )}
                     </div>
                     <button onClick={() => { setEmpresaId(e.id); setAba('convites') }}
                       className="bg-blue-700 hover:bg-blue-600 px-3 py-1 rounded-lg text-xs font-bold transition">

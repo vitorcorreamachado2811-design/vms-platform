@@ -29,6 +29,7 @@ interface Analiticos {
   freezer: boolean
   caixa: boolean
   copos: boolean
+  acompanhamento: boolean
 }
 
 interface Regiao {
@@ -46,7 +47,7 @@ const ANALITICOS_DEFAULT: Analiticos = {
   queda_leito: false, queda_pe: false, pessoa: false,
   banheiro_tempo: false, gesto_socorro: false,
   linha_contagem: false, habitos: false,
-  freezer: false, caixa: false, copos: false,
+  freezer: false, caixa: false, copos: false, acompanhamento: false,
 }
 
 const TIPOS_REGIAO = [
@@ -58,6 +59,7 @@ const TIPOS_REGIAO = [
   { key: 'banheiro',  label: 'Banheiro',      color: '#ec4899' },
   { key: 'cozinha',   label: 'Cozinha',       color: '#10b981' },
   { key: 'quarto',    label: 'Quarto',        color: '#f97316' },
+  { key: 'acompanhamento', label: 'Acompanhamento', color: '#f43f5e' },
 ]
 
 function mjpegUrl(cameraId: string) {
@@ -553,6 +555,7 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
     { key: 'freezer', label: 'Nivel do Freezer' },
     { key: 'caixa', label: 'Monitorar Caixa' },
     { key: 'copos', label: 'Contagem de Copos/Potes' },
+    { key: 'acompanhamento', label: 'Balcao de Acompanhamentos' },
   ]
 
   return (

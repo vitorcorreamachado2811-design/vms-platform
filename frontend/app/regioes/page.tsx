@@ -81,6 +81,7 @@ export default function RegioesPage() {
       case 'cama': return { borda: '#3B82F6', fundo: 'rgba(59,130,246,0.2)', label: '🛏️ Cama' }
       case 'area_risco': return { borda: '#EF4444', fundo: 'rgba(239,68,68,0.2)', label: '⚠️ Área de Risco' }
       case 'banheiro': return { borda: '#10B981', fundo: 'rgba(16,185,129,0.2)', label: '🚿 Banheiro' }
+      case 'acompanhamento': return { borda: '#f43f5e', fundo: 'rgba(244,63,94,0.2)', label: '🍨 Acompanhamento' }
       default: return { borda: '#F59E0B', fundo: 'rgba(245,158,11,0.2)', label: tipo }
     }
   }
@@ -309,6 +310,7 @@ export default function RegioesPage() {
                   { valor: 'cama', label: '🛏️ Cama', desc: 'Detecta queda do leito' },
                   { valor: 'area_risco', label: '⚠️ Área de Risco', desc: 'Alerta de presença' },
                   { valor: 'banheiro', label: '🚿 Banheiro', desc: 'Monitora entradas e quedas' },
+                  { valor: 'acompanhamento', label: '🍨 Acompanhamento', desc: 'Detecta bandeja vazia' },
                 ].map(t => (
                   <button
                     key={t.valor}
