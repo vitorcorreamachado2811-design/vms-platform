@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
   const [novaEmpresaDvr, setNovaEmpresaDvr] = useState<string>('')
   const [dias, setDias] = useState(7)
+  const [perfilConvite, setPerfilConvite] = useState<string>('familiar')
   const [gerando, setGerando] = useState(false)
   const [criandoEmpresa, setCriandoEmpresa] = useState(false)
   const [copiado, setCopiado] = useState<string | null>(null)
@@ -88,7 +89,7 @@ export default function AdminPage() {
       const res = await fetch(`${API}/auth/convite/gerar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresa_id: empresaId, dias_validade: dias })
+        body: JSON.stringify({ empresa_id: empresaId, dias_validade: dias, perfil: perfilConvite })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail)
@@ -215,6 +216,14 @@ export default function AdminPage() {
                   <label className="text-gray-400 text-sm mb-1 block">Validade (dias)</label>
                   <input className="w-full bg-gray-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     type="number" value={dias} onChange={e => setDias(parseInt(e.target.value))} min={1} max={30} />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm mb-1 block">Perfil do usuário</label>
+                  <select className="w-full bg-gray-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={perfilConvite} onChange={e => setPerfilConvite(e.target.value)}>
+                    <option value="familiar">Familiar (acesso básico)</option>
+                    <option value="admin">Admin (gerencia câmeras)</option>
+                  </select>
                 </div>
                 <button onClick={gerarConvite} disabled={gerando || !empresaId}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white py-3 rounded-lg font-bold transition">
