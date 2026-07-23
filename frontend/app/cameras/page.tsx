@@ -29,6 +29,7 @@ interface Analiticos {
   freezer: boolean
   caixa: boolean
   copos: boolean
+  celular: boolean
   acompanhamento: boolean
 }
 
@@ -47,7 +48,7 @@ const ANALITICOS_DEFAULT: Analiticos = {
   queda_leito: false, queda_pe: false, pessoa: false,
   banheiro_tempo: false, gesto_socorro: false,
   linha_contagem: false, habitos: false,
-  freezer: false, caixa: false, copos: false, acompanhamento: false,
+  freezer: false, caixa: false, copos: false, celular: false, acompanhamento: false,
 }
 
 const TIPOS_REGIAO = [
@@ -55,6 +56,7 @@ const TIPOS_REGIAO = [
   { key: 'freezer',   label: 'Freezer',       color: '#06b6d4' },
   { key: 'caixa',     label: 'Caixa',         color: '#f59e0b' },
   { key: 'copos',     label: 'Copos/Potes',   color: '#eab308' },
+  { key: 'celular',   label: 'Celular',        color: '#ef4444' },
   { key: 'cama',      label: 'Cama',          color: '#8b5cf6' },
   { key: 'banheiro',  label: 'Banheiro',      color: '#ec4899' },
   { key: 'cozinha',   label: 'Cozinha',       color: '#10b981' },
@@ -555,6 +557,7 @@ function PainelAnaliticos({ cameraId, onClose }: { cameraId: string; onClose: ()
     { key: 'freezer', label: 'Nivel do Freezer' },
     { key: 'caixa', label: 'Monitorar Caixa' },
     { key: 'copos', label: 'Contagem de Copos/Potes' },
+    { key: 'celular', label: 'Celular em Area Restrita' },
     { key: 'acompanhamento', label: 'Balcao de Acompanhamentos' },
   ]
 
