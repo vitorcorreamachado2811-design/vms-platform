@@ -28,13 +28,14 @@ export default function EventosPage() {
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [cameraSelecionada, setCameraSelecionada] = useState<string>('todas')
-  const [videoAberto, setVideoAberto] = useState<string | null>(null) // ← NOVO
+  const [videoAberto, setVideoAberto] = useState<string | null>(null)
+  const [pagina, setPagina] = useState(0)
 
   const carregarDados = useCallback(async () => {
     if (!usuario) return
     try {
       const [e, c] = await Promise.all([
-        fetch(`${API}/eventos/?empresa_id=${usuario.empresa_id}`).then(r => r.json()),
+        fetch(`${API}/eventos/?empresa_id=${usuario.empresa_id}&page=${pagina}`).then(r => r.json()),
         fetch(`${API}/cameras/?empresa_id=${usuario.empresa_id}`).then(r => r.json()),
       ])
       setEventos(Array.isArray(e) ? e : [])
@@ -45,15 +46,15 @@ export default function EventosPage() {
     } finally {
       setLoading(false)
     }
-  }, [usuario])
+  }, [usuario, pagina])
 
   const carregarEventos = useCallback(async () => {
     if (!usuario) return
     try {
-      const data = await fetch(`${API}/eventos/?empresa_id=${usuario.empresa_id}`).then(r => r.json())
+      const data = await fetch(`${API}/eventos/?empresa_id=${usuario.empresa_id}&page=${pagina}`).then(r => r.json())
       setEventos(Array.isArray(data) ? data : [])
     } catch {}
-  }, [usuario])
+  }, [usuario, pagina])
 
   useEffect(() => {
     if (!authCarregando) carregarDados()
@@ -257,6 +258,23 @@ export default function EventosPage() {
               >
                 🔄 Atualizar
               </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setPagina(p => Math.max(0, p - 1)); }}
+                  disabled={pagina === 0}
+                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-sm font-bold transition"
+                >
+                  ← Anterior
+                </button>
+                <span className="text-gray-400 text-sm">Pág. {pagina + 1}</span>
+                <button
+                  onClick={() => { setPagina(p => p + 1); }}
+                  disabled={eventos.length < 50}
+                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-sm font-bold transition"
+                >
+                  Próxima →
+                </button>
+              </div>
             </div>
           </div>
 
