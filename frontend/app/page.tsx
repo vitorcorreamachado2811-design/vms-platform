@@ -282,7 +282,7 @@ export default function Dashboard() {
   function onMarcaChange(m: string) {
     setMarca(m); setCamPorta(MARCAS[m]?.portaPadrao || '554')
     setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80')
-    setCamSdkPorta(m === 'intelbras' ? '37777' : m === 'hikvision' ? '8000' : '')
+    setCamSdkPorta('')
     setRtspUrl(''); setHttpUrl('')
   }
 
