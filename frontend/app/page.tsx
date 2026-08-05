@@ -192,6 +192,7 @@ export default function Dashboard() {
   const [camSenha, setCamSenha]         = useState('')
   const [camCanal, setCamCanal]         = useState('1')
   const [camPortaHttp, setCamPortaHttp] = useState('80')
+  const [camSdkPorta, setCamSdkPorta]   = useState('')
   const [httpUrl, setHttpUrl]           = useState('')
   const [nomeEmpresa, setNomeEmpresa]   = useState('')
   const [emailEmpresa, setEmailEmpresa] = useState('')
@@ -280,7 +281,9 @@ export default function Dashboard() {
 
   function onMarcaChange(m: string) {
     setMarca(m); setCamPorta(MARCAS[m]?.portaPadrao || '554')
-    setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80'); setRtspUrl(''); setHttpUrl('')
+    setCamPortaHttp(MARCAS[m]?.portaHttpPadrao || '80')
+    setCamSdkPorta(m === 'intelbras' ? '37777' : m === 'hikvision' ? '8000' : '')
+    setRtspUrl(''); setHttpUrl('')
   }
 
   async function criarCamera() {
@@ -291,7 +294,7 @@ export default function Dashboard() {
       const timeout = setTimeout(() => controller.abort(), 10000)
       const res = await fetch(`${API}/cameras/`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, http_url: httpUrl || null, empresa_id: empresaId }),
+        body: JSON.stringify({ nome: nomeCamera, rtsp_url: rtspUrl, http_url: httpUrl || null, empresa_id: empresaId, dvr_sdk_porta: camSdkPorta ? parseInt(camSdkPorta) : null }),
         signal: controller.signal,
       })
       clearTimeout(timeout)
@@ -493,6 +496,12 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2">
                           <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm flex-1" placeholder="Porta HTTP" value={camPortaHttp} onChange={e => { setCamPortaHttp(e.target.value); setTimeout(gerarUrl, 0) }} onBlur={gerarUrl} />
                           <span className="text-gray-400 text-xs">porta HTTP ao vivo</span>
+                        </div>
+                      )}
+                      {(marca === 'intelbras' || marca === 'hikvision') && (
+                        <div className="flex items-center gap-2">
+                          <input className="bg-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm flex-1" placeholder="Porta de servico (SDK)" value={camSdkPorta} onChange={e => setCamSdkPorta(e.target.value)} />
+                          <span className="text-gray-400 text-xs">porta SDK/TCP</span>
                         </div>
                       )}
                     </div>
